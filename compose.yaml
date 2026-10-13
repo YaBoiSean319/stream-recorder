@@ -1,0 +1,15 @@
+services:
+  recorder:
+    image: ${RECORDER_IMAGE:-ghcr.io/yaboisean319/stream-recorder:0.1.0}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${RECORDER_BIND:-127.0.0.1}:${RECORDER_PORT:-8080}:8080"
+    volumes:
+      - recorder-data:/data
+    environment:
+      DATA_DIR: /data
+      PORT: "8080"
+    stop_grace_period: 30s
+volumes:
+  recorder-data:
