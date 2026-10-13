@@ -10,7 +10,19 @@ const { chromium } = require('playwright');
     await page.locator('#connection').filter({hasText:'Connected'}).waitFor();
     assert.equal(await page.locator('#start').isEnabled(), true);
     await page.locator('#preview').evaluate(video => video.play());
-    await page.waitForFunction(() => document.querySelector('#preview').currentTime > 0, {timeout:15000});
+    try {
+      await page.waitForFunction(() => document.querySelector('#preview').currentTime > 0, null, {timeout:15000});
+    } catch (error) {
+      console.error('Preview diagnostics:', await page.evaluate(() => {
+        const video = document.querySelector('#preview');
+        return {nativeHls: video.canPlayType('application/vnd.apple.mpegurl'),
+          hlsSupported: window.Hls?.isSupported(), currentSrc: video.currentSrc,
+          readyState: video.readyState, networkState: video.networkState,
+          error: video.error && {code: video.error.code, message: video.error.message},
+          message: document.querySelector('#preview-message').textContent};
+      }));
+      throw error;
+    }
     await page.locator('#duration').fill('1');
     await page.locator('#start').click();
     await page.locator('#state').filter({hasText:'Recording'}).waitFor();
