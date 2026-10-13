@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from aiohttp import web
 ACTIVE = {'recording', 'reconnecting', 'recovering', 'processing'}
+SUPERVISOR_PID = os.getpid()
 
 def stamp():
     return dt.datetime.now(dt.timezone.utc).isoformat()
@@ -12,6 +13,8 @@ def epoch(value):
 
 def parent_death_signal():
     ctypes.CDLL(None).prctl(1, signal.SIGKILL)
+    if os.getppid() != SUPERVISOR_PID:
+        os.kill(os.getpid(), signal.SIGKILL)
 
 class Recorder:
 
@@ -33,6 +36,7 @@ class Recorder:
         self.task = None
         self.proc = None
         self.closing = False
+        self.conversion_log = None
 
     def save(self, r):
         self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
@@ -43,7 +47,9 @@ class Recorder:
 
     def usage(self):
         disk = shutil.disk_usage(self.root)
-        return {'media_bytes': sum((p.stat().st_size for p in self.media.rglob('*') if p.is_file())), 'cap_bytes': self.settings['storage_cap_bytes'], 'total_bytes': disk.total, 'free_bytes': disk.free}
+        media_bytes = sum(p.stat().st_size for p in self.media.rglob('*') if p.is_file())
+        cap = self.settings['storage_cap_bytes']
+        return {'media_bytes': media_bytes, 'cap_bytes': cap, 'total_bytes': disk.total, 'free_bytes': disk.free, 'cap_exceeded': media_bytes > cap}
 
     def remove(self, r):
         shutil.rmtree(self.media / r['id'], ignore_errors=True)
@@ -85,13 +91,19 @@ class Recorder:
                 await self.task
             except asyncio.CancelledError:
                 pass
+        if self.conversion_log and not self.conversion_log.closed:
+            self.conversion_log.close()
         self.db.close()
         self.lockfile.close()
 
     async def terminate(self):
         p = self.proc
         if p and p.returncode is None:
-            p.send_signal(signal.SIGINT)
+            try:
+                p.send_signal(signal.SIGINT)
+            except ProcessLookupError:
+                await p.wait()
+                return
             try:
                 await asyncio.wait_for(p.wait(), 5)
             except asyncio.TimeoutError:
@@ -153,6 +165,7 @@ class Recorder:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            await self.terminate()
             r['state'] = 'error'
             r['error'] = str(exc)
             self.save(r)
@@ -162,18 +175,43 @@ class Recorder:
             self.proc = None
 
     async def probe(self, path):
-        p = await asyncio.create_subprocess_exec('ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        out, _ = await p.communicate()
-        if p.returncode:
-            raise RuntimeError('Media inspection failed; source footage retained')
-        return json.loads(out)
+        p = await asyncio.create_subprocess_exec('ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, preexec_fn=parent_death_signal)
+        try:
+            out, _ = await asyncio.wait_for(p.communicate(), 30)
+            if p.returncode:
+                raise RuntimeError('Media inspection failed; source footage retained')
+            return json.loads(out)
+        finally:
+            if p.returncode is None:
+                p.kill()
+                await p.wait()
+
+    async def validate_decode(self, path, folder):
+        # A valid container header does not establish that its media is playable.
+        # Decode every selected track before publishing the download.
+        with open(folder / 'validation.log', 'wb') as log:
+            self.proc = await asyncio.create_subprocess_exec(
+                'ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
+                '-xerror', '-err_detect', 'explode', '-i', str(path),
+                '-map', '0:v?', '-map', '0:a?', '-f', 'null', '-',
+                stdout=asyncio.subprocess.DEVNULL, stderr=log,
+                start_new_session=True, preexec_fn=parent_death_signal)
+            try:
+                await self.proc.wait()
+                return self.proc.returncode == 0
+            finally:
+                if self.proc.returncode is None:
+                    self.proc.kill()
+                    await self.proc.wait()
 
     async def finalize(self, r, folder):
         pieces = []
         duration = 0
+        expected_tracks = set()
         for p in sorted(folder.glob('capture-*.ts')):
             try:
                 info = await self.probe(p)
+                expected_tracks.update(stream['codec_type'] for stream in info['streams'] if stream['codec_type'] in {'video', 'audio'})
                 duration += float(info['format'].get('duration', 0))
                 pieces.append(p)
             except Exception:
@@ -194,6 +232,7 @@ class Recorder:
             args += ['-c', 'copy'] if copy else ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-b:a', '192k']
             args += ['-movflags', '+faststart', '-progress', 'pipe:1', str(out)]
             log = open(folder / 'conversion.log', 'wb')
+            self.conversion_log = log
             self.proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=log, start_new_session=True, preexec_fn=parent_death_signal)
             async for line in self.proc.stdout:
                 if line.startswith(b'out_time_us='):
@@ -212,10 +251,15 @@ class Recorder:
                 return
             if self.proc.returncode == 0:
                 info = await self.probe(out)
-                if any((s['codec_type'] in {'video', 'audio'} for s in info['streams'])) and float(info['format'].get('duration', 0)) > 0:
-                    break
+                output_tracks = {stream['codec_type'] for stream in info['streams'] if stream['codec_type'] in {'video', 'audio'}}
+                if output_tracks and output_tracks >= expected_tracks and float(info['format'].get('duration', 0)) > 0:
+                    playable = await self.validate_decode(out, folder)
+                    if self.closing:
+                        return
+                    if playable:
+                        break
         else:
-            raise RuntimeError('MP4 conversion failed. Inspect conversion.log; source footage retained.')
+            raise RuntimeError('MP4 conversion failed or playback validation failed. Inspect conversion.log and validation.log; source footage retained.')
         out.replace(folder / r['filename'])
         r['state'] = 'ready'
         r['progress'] = 100
@@ -265,6 +309,7 @@ def create_app(path=None):
                         service.settings = settings
                         service.db.execute('INSERT OR REPLACE INTO settings VALUES(1,?)', (json.dumps(settings),))
                         service.db.commit()
+                        service.space(0)
                     return web.json_response(service.settings)
                 if route == 'status':
                     return web.json_response({'active': service.active(), 'storage': service.usage()})
