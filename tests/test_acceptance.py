@@ -472,3 +472,28 @@ sys.exit(result.returncode)
         self.assertIn('validation', completed['error'].lower())
         code, _ = await self.request('GET', f"/api/recordings/{recording['id']}/download", check=False)
         self.assertEqual(code, 409)
+
+    async def test_cap_exhaustion_during_processing_preserves_source(self):
+        await self.kill_server()
+        commands = self.root / 'slow-converter'
+        commands.mkdir()
+        script = commands / 'slow.py'
+        script.write_text('import os, sys, time\nif sys.argv[-1].endswith("finalizing.mp4"): time.sleep(10)\nos.execv("/usr/bin/ffmpeg", ["ffmpeg", *sys.argv[1:]])\n')
+        wrapper = commands / 'ffmpeg'
+        wrapper.write_text(f'#!/bin/sh\nexec {sys.executable} {script} "$@"\n')
+        wrapper.chmod(0o755)
+        self.server_env = {'PATH': str(commands) + ':' + os.environ['PATH']}
+        await self.start_server()
+        _, recording = await self.request('POST', '/api/recordings', {'duration_seconds': 4})
+        for _ in range(150):
+            _, current = await self.request('GET', f"/api/recordings/{recording['id']}")
+            if current['state'] == 'processing':
+                break
+            await asyncio.sleep(.1)
+        self.assertEqual(current['state'], 'processing')
+        await self.request('PUT', '/api/settings', {'storage_cap_bytes': 1024**2})
+        completed = await self.wait_terminal(recording['id'])
+        self.assertEqual(completed['state'], 'error', completed)
+        self.assertIn('space', completed['error'].lower())
+        _, status = await self.request('GET', '/api/status')
+        self.assertGreater(status['storage']['media_bytes'], 10000)
