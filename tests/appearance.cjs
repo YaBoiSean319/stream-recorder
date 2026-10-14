@@ -84,6 +84,7 @@ module.exports = async function appearance(browser, base) {
     const red = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==','base64');
     const blue = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNkYPjPwMDAxMDAwMDAAAALHwEDmIWXfgAAAABJRU5ErkJggg==','base64');
     await page.getByLabel('Light logo').setInputFiles({name:'light.png',mimeType:'image/png',buffer:red});
+    await page.locator('.brand-image').waitFor({state:'visible'});
     assert.equal(await page.locator('.brand-image').isVisible(),true);
     await page.getByLabel('Dark logo').setInputFiles({name:'dark.png',mimeType:'image/png',buffer:blue});
     await page.getByLabel('Favicon').setInputFiles({name:'icon.png',mimeType:'image/png',buffer:red});
