@@ -24,7 +24,7 @@ function recorderFetch(input,options={}) {
  }
  function buildSignIn() {
   document.getElementById('recorder-screen').hidden=true;document.getElementById('settings-screen').hidden=true;
-  const login=node('section');login.className='card settings';const title=node('h1','Sign in to '),identity=node('span',document.querySelector('[data-app-name]')?.textContent||'Stream Recorder');identity.className='login-brand-name';title.append(identity);login.append(title);
+  const login=node('section');login.className='card settings';const image=node('img');image.className='login-brand-image';image.alt='';image.hidden=true;login.append(image);const title=node('h1','Sign in to '),identity=node('span',document.querySelector('[data-app-name]')?.textContent||'Stream Recorder');identity.className='login-brand-name';title.append(identity);login.append(title);window.paintBrandingAssets?.();
   const form=node('form'),username=field(form,'login-username','Username'),password=field(form,'login-password','Password','password');password.autocomplete='current-password';button(form,'Sign in');form.onsubmit=async e=>{e.preventDefault();try{await request('/api/auth/login',{username:username.value,password:password.value});location.reload();}catch(e){report(e);}};login.append(form);
   if(accessState.sso_enabled){const sso=node('a','Sign in with SSO');sso.href='/api/auth/oidc/login';login.append(sso);}
   document.querySelector('main').prepend(login);

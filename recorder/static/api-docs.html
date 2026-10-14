@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stream Recorder API</title>
+<style>body{font:16px system-ui;max-width:900px;margin:2rem auto;padding:0 1rem;background:#191919;color:#f4f4f4}a{color:#b9dafc}label{display:block;margin:1rem 0}input,textarea,select,button{font:inherit;padding:.6rem;background:#292929;color:inherit;border:1px solid #aaa;border-radius:.3rem}input,textarea{width:100%;box-sizing:border-box}textarea{height:9rem}button{cursor:pointer;background:#eee;color:#111}button:focus-visible,input:focus-visible{outline:3px solid #94bfff}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111;padding:1rem}option{background:#292929}</style>
+<h1>Stream Recorder API</h1>
+<p>Read the <a href="/api/v1/openapi.json">OpenAPI 3.1 contract</a> and <a href="/">return to the recorder</a>. Requests below use your current browser session and CSRF token, or a bearer key entered for this request. No request runs until you press Send.</p>
+<form id="request-form"><label>Operation<select id="operation"></select></label><label>Path<input id="path" required></label><label>Bearer API key (optional; never saved)<input id="key" type="password" autocomplete="off"></label><label>JSON request body<textarea id="body" spellcheck="false">{}</textarea></label><button type="submit">Send request</button></form>
+<h2>Response</h2><pre id="result" role="status" aria-live="polite">Choose an operation and press Send.</pre>
+<script src="/static/api-docs.js" defer></script></html>

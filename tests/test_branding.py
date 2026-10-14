@@ -1,6 +1,8 @@
 """Shared branding is observable through public/versioned HTTP, across restarts."""
 import tempfile
 import unittest
+import io
+from PIL import Image
 from aiohttp.test_utils import TestClient, TestServer
 from recorder.server import create_app
 
@@ -58,3 +60,51 @@ class BrandingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await self.client.put('/api/v1/branding', json={'name':bad})).status, 400)
         self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['name'], 'Stream Recorder')
         self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['light']['text'], '#171717')
+
+    async def test_image_assets_are_public_durable_and_reset_independently(self):
+        def png(color):
+            output = io.BytesIO()
+            Image.new('RGB', (40, 30), color).save(output, format='PNG')
+            return output.getvalue()
+
+        original = png('red')
+        newer = png('blue')
+        path = '/api/v1/branding/assets/light_logo'
+        self.assertEqual((await self.client.get(path)).status, 404)
+        uploaded = await self.client.put(path, data=original, headers={'Content-Type': 'image/png'})
+        self.assertEqual(uploaded.status, 200)
+        first_url = (await uploaded.json())['assets']['light_logo']
+        self.assertEqual((await (await self.client.get(first_url)).read()), original)
+        self.assertEqual((await self.client.get(first_url)).headers['Content-Type'], 'image/png')
+        changed = await self.client.put(path, data=newer, headers={'Content-Type': 'image/png'})
+        self.assertEqual(changed.status, 200)
+        self.assertNotEqual((await changed.json())['assets']['light_logo'], first_url)
+        self.assertEqual((await (await self.client.get(path)).read()), newer)
+        for slot in ('dark_logo', 'favicon'):
+            response = await self.client.put(f'/api/v1/branding/assets/{slot}', data=original, headers={'Content-Type': 'image/png'})
+            self.assertEqual(response.status, 200)
+        await self.client.close()
+        await self.open_app()
+        self.assertEqual((await (await self.client.get(path)).read()), newer)
+        self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['assets']['dark_logo'].startswith('/api/v1/branding/assets/'), True)
+        self.assertEqual((await self.client.delete(path)).status, 200)
+        self.assertEqual((await self.client.get(path)).status, 404)
+        self.assertEqual((await self.client.post('/api/v1/branding/reset', json={})).status, 200)
+        self.assertEqual((await self.client.get('/api/v1/branding/assets/favicon')).status, 404)
+
+    async def test_bad_uploads_preserve_prior_asset_and_admin_controls(self):
+        output = io.BytesIO()
+        Image.new('RGB', (20, 20), 'green').save(output, format='PNG')
+        original = output.getvalue()
+        path = '/api/v1/branding/assets/dark_logo'
+        self.assertEqual((await self.client.put(path, data=original, headers={'Content-Type':'image/png'})).status, 200)
+        for content_type, data in [('image/svg+xml', b'<svg onload="alert(1)"/>'), ('image/png', b'not a png'), ('image/png', original + b'<script>alert(1)</script>'), ('image/png', b'0' * (2 * 1024 * 1024 + 1))]:
+            response = await self.client.put(path, data=data, headers={'Content-Type':content_type})
+            self.assertIn(response.status, (400, 413), content_type)
+            self.assertEqual((await (await self.client.get(path)).read()), original)
+        self.assertEqual((await self.client.put('/api/v1/branding/assets/other', data=original, headers={'Content-Type':'image/png'})).status, 404)
+        await self.client.post('/api/auth/config', json={'username':'admin', 'password':'correct horse battery staple', 'enabled':True})
+        self.assertEqual((await self.client.get(path)).status, 200)
+        self.assertEqual((await self.client.put(path, data=original, headers={'Content-Type':'image/png'})).status, 401)
+        operator = await (await self.client.post('/api/auth/login', json={'username':'admin','password':'correct horse battery staple'})).json()
+        self.assertEqual((await self.client.put(path, data=original, headers={'Content-Type':'image/png','X-CSRF-Token':operator['csrf_token']})).status, 200)

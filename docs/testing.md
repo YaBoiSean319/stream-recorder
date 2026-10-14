@@ -12,6 +12,8 @@ Settings coverage uses the same public HTTP and browser boundaries: fresh empty-
 
 Appearance coverage in `tests/appearance.cjs` uses Settings controls and observed browser state for theme changes, shared branding, reload persistence, isolated browser preferences, device System changes, invalid-preference fallback, keyboard focus, and mobile navigation/overflow. It runs as part of browser smoke. `tests/test_branding.py` checks public branding, administration, persistence, reset scope, and invalid values over HTTP. Browser cases require Chromium.
 
+Asset coverage in `tests/test_branding.py` checks decoded PNG upload, replacement, public image reads, restart preservation with the same persistent data directory, invalid/active/trailing/oversized uploads retaining the prior asset, access controls, per-slot clearing, and branding-only reset. `tests/appearance.cjs` previews, saves, selects the effective light/dark logo, verifies the favicon and reload, and checks discard/reset. Browser smoke also verifies the uploaded dark logo on the sign-in screen. The same persisted directory used in the container replacement workflow carries the SQLite branding manifest and `branding-assets/` files through replacement.
+
 Failure coverage uses external process fixtures: a temporary FFmpeg command shim rejects conversion while real capture continues; an optional compiled `LD_PRELOAD` fixture reports zero available filesystem blocks. The latter verifies public API handling of OS capacity, without filling the host disk. It requires a C compiler and is skipped when none exists. These controlled failures do not substitute for physical disk-failure testing.
 
 ## Combined upgrade review
