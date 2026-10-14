@@ -71,16 +71,16 @@ module.exports = async function appearance(browser, base) {
       assert.equal(await other.title(), 'Studio One');
       assert.equal(await other.getByLabel('Theme').inputValue(), 'system');
     } finally { await otherContext.close(); }
-    await page.getByLabel('Dark background hex').fill('#252525');
+    await page.getByLabel('Dark background hex',{exact:true}).fill('#252525');
     assert.equal(await page.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--brand-dark-background').trim()), '#252525');
     await page.getByLabel('light accent RGB').fill('rgb(10, 20, 30)');
     assert.equal(await page.getByLabel('Light accent hex').inputValue(), '#0a141e');
     await page.getByLabel('dark accent color picker').fill('#778899');
     assert.equal(await page.getByLabel('Dark accent hex').inputValue(), '#778899');
-    await page.getByLabel('Light text hex').fill('#ffffff');
+    await page.getByLabel('Light text hex',{exact:true}).fill('#ffffff');
     await page.getByText('Contrast warning:').waitFor();
     await page.getByRole('button',{name:'Discard preview'}).click();
-    assert.equal(await page.getByLabel('Light text hex').inputValue(), '#171717');
+    assert.equal(await page.getByLabel('Light text hex',{exact:true}).inputValue(), '#171717');
     const red = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==','base64');
     const blue = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNkYPjPwMDAxMDAwMDAAAALHwEDmIWXfgAAAABJRU5ErkJggg==','base64');
     await page.getByLabel('Light logo').setInputFiles({name:'light.png',mimeType:'image/png',buffer:red});
