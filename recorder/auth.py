@@ -97,7 +97,7 @@ class Access:
         body = await request.json()
         if not isinstance(body, dict):
             raise web.HTTPBadRequest(text='JSON object required')
-        updated = dict(self.state)
+        changes = {}
         if 'public_url' in body:
             value = body['public_url']
             parsed = urlsplit(value) if isinstance(value, str) else None
@@ -108,13 +108,16 @@ class Access:
                 raise web.HTTPBadRequest(text='Public URL must be an HTTPS origin') from None
             if not parsed or parsed.scheme != 'https' or not parsed.hostname or parsed.path not in {'', '/'} or parsed.query or parsed.fragment or parsed.username:
                 raise web.HTTPBadRequest(text='Public URL must be an HTTPS origin')
-            updated['public_url'] = value.rstrip('/')
+            changes['public_url'] = value.rstrip('/')
         if 'password' in body or 'username' in body:
             username, password = body.get('username'), body.get('password')
             if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not 12 <= len(password) <= 1024:
                 raise web.HTTPBadRequest(text='Administrator username and password of at least 12 characters required')
             salt = secrets.token_hex(16)
-            updated['admin'] = {'username':username.strip(), 'salt':salt, 'hash':await asyncio.to_thread(password_hash, password, salt)}
+            changes['admin'] = {'username':username.strip(), 'salt':salt, 'hash':await asyncio.to_thread(password_hash, password, salt)}
+        # Hashing yields to concurrent key/SSO updates. Snapshot current state only
+        # after the last await, then validate and save this transition atomically.
+        updated = {**self.state, **changes}
         enabled = body.get('enabled', updated['enabled'])
         if not isinstance(enabled, bool) or (enabled and not updated['admin']):
             raise web.HTTPBadRequest(text='Create a local administrator before enabling authentication')

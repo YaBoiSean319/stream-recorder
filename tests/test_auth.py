@@ -1,3 +1,4 @@
+import asyncio
 import tempfile, unittest
 from aiohttp.test_utils import TestClient, TestServer
 from recorder.server import create_app
@@ -39,6 +40,18 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status, 400)
         config = await (await self.client.get('/api/auth/config')).json()
         self.assertEqual(config['public_url'], '')
+
+    async def test_password_change_does_not_resurrect_concurrently_revoked_key(self):
+        key = await (await self.client.post('/api/auth/keys', json={'label':'revoke-during-update'})).json()
+        update = asyncio.create_task(self.client.post('/api/auth/config', json={
+            'username':'admin', 'password':'correct horse battery staple', 'enabled':True,
+        }))
+        await asyncio.sleep(0.01)
+        revoked = await self.client.delete('/api/auth/keys/'+key['id'])
+        self.assertEqual(revoked.status, 200)
+        self.assertEqual((await update).status, 200)
+        response = await self.client.get('/api/status', headers={'Authorization':'Bearer '+key['key']})
+        self.assertEqual(response.status, 401)
 
     async def test_operator_key_permissions_revocation_and_persistence(self):
         response = await self.client.post('/api/auth/keys', json={'label':'automation'})
