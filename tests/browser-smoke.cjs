@@ -177,6 +177,8 @@ const { chromium } = require('playwright');
       await signIn.locator('#login-username').fill('browser-admin');
       await signIn.locator('#login-password').fill('browser-fixture-password');
       await signIn.getByRole('button',{name:'Sign in',exact:true}).click();
+      await signIn.waitForFunction(() => accessState.role === 'admin');
+      await signIn.getByRole('link',{name:'Settings',exact:true}).click();
       await signIn.locator('#admin-username').waitFor({state:'visible'});
     } finally { await anonymous.close(); }
     await snapshot(reopened,'mobile-authenticated-settings');
