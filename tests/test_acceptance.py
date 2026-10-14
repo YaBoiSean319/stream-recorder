@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import sqlite3
@@ -203,6 +204,12 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         for _ in range(int(timeout * 5)):
             _, recording = await self.request('GET', f'/api/recordings/{recording_id}')
             if recording['state'] in ('ready', 'error'):
+                if recording['state'] == 'error':
+                    # Only isolated fixture diagnostics; redact opaque capabilities.
+                    log = self.root / 'data' / 'media' / recording_id / 'capture.log'
+                    if log.exists():
+                        diagnostic = re.sub(r'https?://[^\s\"\']+', '<relay-resource>', log.read_text(errors='replace')[-8000:])
+                        print(f'Capture diagnostic ({recording_id}):\n{diagnostic}', file=sys.stderr)
                 return recording
             await asyncio.sleep(.2)
         self.fail(f'Recording never became terminal: {recording}')

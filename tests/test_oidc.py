@@ -6,7 +6,10 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from joserfc import jwt
 from joserfc.jwk import RSAKey
-from tests import test_auth
+try:
+    from . import test_auth
+except ImportError:
+    import test_auth
 
 
 class OIDCTests(unittest.IsolatedAsyncioTestCase):
