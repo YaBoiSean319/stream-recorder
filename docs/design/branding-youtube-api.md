@@ -14,8 +14,6 @@ Status: design interview in progress. Confirmed choices below are requirements; 
 - Default upload visibility is Unlisted. Display background progress, failures, retry controls, and a copyable YouTube video link. Keep the local recording after uploading.
 - Expose every GUI operation through a versioned backend API, including recording operations, sources, settings, and upload jobs. Provide scoped API keys, OpenAPI documentation, and practical repository examples.
 
-## Remaining decisions
-
 ## Round two confirmed requirements
 
 - Operators may rename recordings and upload them; Administrators manage shared branding, the YouTube connection, and API keys. Recording deletion remains administrator-only.
@@ -25,14 +23,21 @@ Status: design interview in progress. Confirmed choices below are requirements; 
 - Signed outgoing webhooks report recording completion/failure and upload results, with delivery retries and polling alternatives. Start/upload operations support idempotency keys.
 - Branding and default colors apply at application level. Each browser stores its own System/Light/Dark choice and starts on System. Updates preserve settings and browser preferences; branding changes only on explicit edit/reset.
 
+## Round three confirmed requirements
+
+- Branding supports separate light/dark logos, one favicon, and accents/backgrounds/surfaces/text/SSO button colors. Color controls accept RGB, hex, and color-picker input. Warn about poor contrast. Branding-only reset preserves authentication and connections.
+- Recordings may be named on start and renamed later. Renaming does not modify existing YouTube videos. Upload metadata is captured when queued, initially using the recording title.
+- Upload forms and automatic-upload defaults include tags, category, audience (made for kids), and subscriber notifications. An explicit audience choice is required before enabling uploads. Subscriber notifications default off. Templates support recording title, source name, and start date/time.
+- Refuse new captures with an explanatory message if protected queued/uploading recordings prevent enough space being freed. Failed uploads retain protection until retried, cancelled, or explicitly released. Block deliberate deletion during queued/running uploads.
+- API keys have selectable permissions, optional expiration, revocation, and last-used information, independently of browser authentication. A separate Require API key setting defaults off for compatibility. Reveal key values only on creation. Read endpoints never expose saved passwords or OAuth tokens.
+- Serve interactive API documentation in the application and maintain repository documentation. Introduce /api/v1 with existing routes retained as compatibility aliases. Document examples, permissions, errors, pagination, webhooks, and Power Automate/n8n workflows.
+- Initial Google OAuth consent requires a human; authorized recording/upload operations can subsequently run unattended.
+
 ## Open design questions
 
-- Permissions for renaming, uploads, branding, credentials, and API key management.
-- Google OAuth setup and account/channel connection lifecycle.
-- Upload queue, restart recovery, retention protection, cancellation, and duplicate requests.
-- API scope boundaries, event notifications, documentation hosting, compatibility, and secret handling.
-- Branding asset limits, global versus personal appearance choices, and reset scope.
-- Recording title behavior during capture and interaction with YouTube metadata.
+- Eligibility of recovered/interrupted recordings for automatic upload.
+- Cancellation and disconnect behavior, including already-created remote videos and queued channel binding.
+- Access to interactive documentation and behavior of the Try it controls.
 
 ## Terminology
 
