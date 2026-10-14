@@ -19,3 +19,19 @@ _Avoid_: Superuser, owner
 **Operator**:
 A person authorized to preview, capture, stop, list, download, and pin recordings when built-in authentication is enabled.
 _Avoid_: Viewer, technician
+
+**Recording title**:
+The editable human-readable name of a recording, distinct from its stable identity and capture dates.
+_Avoid_: Recording ID
+
+**Application branding**:
+The shared name, visual identity, and appearance used to present this recorder to its users.
+_Avoid_: User profile
+
+**YouTube connection**:
+The shared authorization linking the recorder to one YouTube channel for uploads.
+_Avoid_: SSO account
+
+**Upload job**:
+A tracked attempt to transfer a completed recording to the connected YouTube channel with chosen video metadata and visibility.
+_Avoid_: Recording, capture session
