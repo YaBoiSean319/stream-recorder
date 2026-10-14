@@ -6,6 +6,49 @@ from aiohttp.test_utils import TestServer, TestClient
 from recorder.source import SourceRelay
 
 class RelayAcceptance(unittest.IsolatedAsyncioTestCase):
+    async def test_ranges_redirects_and_failed_sources_are_bounded(self):
+        async def upstream(request):
+            if request.path == '/root':
+                raise web.HTTPFound('/relative/media')
+            if request.path == '/relative/media':
+                return web.Response(text='#EXTM3U\n#EXT-X-MAP:URI="../bytes"\n#EXT-X-BYTERANGE:3@2\n../bytes\n')
+            if request.path == '/bytes':
+                self.assertEqual(request.headers.get('Range'), 'bytes=2-4')
+                return web.Response(body=b'cde', status=206, headers={'Content-Range': 'bytes 2-4/6', 'Accept-Ranges': 'bytes'})
+            if request.path == '/bad':
+                return web.Response(text='#EXTM3U\nfile:///private.ts\n')
+            if request.path == '/loop':
+                raise web.HTTPFound('/loop')
+            raise web.HTTPUnauthorized()
+        source = web.Application(); source.router.add_get('/{tail:.*}', upstream)
+        async with TestServer(source) as server:
+            relay = SourceRelay()
+            app = web.Application(); app.router.add_get('/preview/{token}', relay.handle)
+            async with TestClient(TestServer(app)) as client:
+                root = relay.register({'source_url': str(server.make_url('/root'))})
+                text = await (await client.get(root)).text()
+                self.assertIn('#EXT-X-BYTERANGE:3@2', text)
+                response = await client.get(text.splitlines()[-1], headers={'Range': 'bytes=2-4'})
+                self.assertEqual(response.status, 206)
+                self.assertEqual(response.headers['Content-Range'], 'bytes 2-4/6')
+                self.assertEqual(await response.read(), b'cde')
+                for path in ('/bad', '/loop', '/missing'):
+                    url = relay.register({'source_url': str(server.make_url(path))})
+                    response = await client.get(url)
+                    self.assertEqual(response.status, 502)
+                    self.assertEqual(await response.text(), 'Configured source resource unavailable')
+            await relay.close()
+
+    async def test_capture_references_are_not_public_preview_resources(self):
+        source = web.Application(); source.router.add_get('/root', lambda request: web.Response(text='#EXTM3U\n'))
+        async with TestServer(source) as server:
+            relay = SourceRelay()
+            app = web.Application(); app.router.add_get('/preview/{token}', relay.handle)
+            async with TestClient(TestServer(app)) as client:
+                capture = await relay.capture_url({'source_url': str(server.make_url('/root'))})
+                token = capture.rsplit('/', 1)[-1]
+                self.assertEqual((await client.get('/preview/' + token)).status, 404)
+            await relay.close()
     async def test_credentials_are_not_forwarded_to_cross_origin_resources(self):
         seen = []
         async def other(request):

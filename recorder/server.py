@@ -2,6 +2,7 @@ import asyncio, ctypes, datetime as dt, fcntl, json, os, shutil, signal, sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit
 from aiohttp import web
+from .source import SourceRelay, source_config, public_record, public_source, update_source
 ACTIVE = {'recording', 'reconnecting', 'recovering', 'processing'}
 SUPERVISOR_PID = os.getpid()
 
@@ -30,13 +31,17 @@ class Recorder:
         self.db.execute('CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY,payload TEXT)')
         self.db.execute('CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY,payload TEXT)')
         row = self.db.execute('SELECT payload FROM settings WHERE id=1').fetchone()
-        self.settings = json.loads(row[0]) if row else {'source_url': 'https://ch91.gvsit.org/hls/test.m3u8', 'storage_cap_bytes': 100 * 1024 ** 3}
+        defaults = {'source_url': '', 'storage_cap_bytes': 100 * 1024 ** 3, 'auth_enabled': False}
+        self.settings = {**defaults, **(json.loads(row[0]) if row else {})}
+        self.db.execute('INSERT OR REPLACE INTO settings VALUES(1,?)', (json.dumps(self.settings),))
+        self.db.commit()
         self.records = {i: json.loads(p) for i, p in self.db.execute('SELECT id,payload FROM records')}
         self.gate = asyncio.Lock()
         self.task = None
         self.proc = None
         self.closing = False
         self.conversion_log = None
+        self.relay = SourceRelay()
 
     def save(self, r):
         self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
@@ -93,6 +98,7 @@ class Recorder:
                 pass
         if self.conversion_log and not self.conversion_log.closed:
             self.conversion_log.close()
+        await self.relay.close()
         self.db.close()
         self.lockfile.close()
 
@@ -123,7 +129,8 @@ class Recorder:
                     break
                 index = max([int(p.stem.split('-')[-1]) for p in folder.glob('capture-*.ts')] + [-1]) + 1
                 log = open(folder / 'capture.log', 'ab')
-                self.proc = await asyncio.create_subprocess_exec('ffmpeg', '-hide_banner', '-loglevel', 'warning', '-nostdin', '-rw_timeout', '10000000', '-i', r['source_url'], '-map', '0:v?', '-map', '0:a?', '-c', 'copy', '-f', 'segment', '-segment_time', '2', '-segment_format', 'mpegts', '-reset_timestamps', '1', '-segment_start_number', str(index), str(folder / 'capture-%06d.ts'), stdout=asyncio.subprocess.DEVNULL, stderr=log, start_new_session=True, preexec_fn=parent_death_signal)
+                capture_url = await self.relay.capture_url(r.get('source_config', {'source_url': r.get('source_url', '')}))
+                self.proc = await asyncio.create_subprocess_exec('ffmpeg', '-hide_banner', '-loglevel', 'warning', '-nostdin', '-rw_timeout', '10000000', '-allowed_extensions', 'ALL', '-i', capture_url, '-map', '0:v?', '-map', '0:a?', '-c', 'copy', '-f', 'segment', '-segment_time', '2', '-segment_format', 'mpegts', '-reset_timestamps', '1', '-segment_start_number', str(index), str(folder / 'capture-%06d.ts'), stdout=asyncio.subprocess.DEVNULL, stderr=log, start_new_session=True, preexec_fn=parent_death_signal)
                 r['state'] = 'recording'
                 self.save(r)
                 last_bytes = -1
@@ -271,7 +278,7 @@ def create_app(path=None):
     service = Recorder(path or os.environ.get('DATA_DIR', '/data'))
     app = web.Application()
     from recorder.auth import install
-    install(app, service)
+    access = install(app, service)
     app[web.AppKey('recorder', Recorder)] = service
 
     async def api(request):
@@ -300,38 +307,51 @@ def create_app(path=None):
                     raise web.HTTPBadRequest(text='JSON object required')
                 if route == 'settings':
                     if method == 'PUT':
-                        settings = dict(service.settings)
-                        settings.update({k: v for k, v in body.items() if k in settings})
+                        try:
+                            settings = update_source(service.settings, body)
+                        except ValueError as error:
+                            raise web.HTTPBadRequest(text=str(error)) from None
+                        if 'storage_cap_bytes' in body:
+                            settings['storage_cap_bytes'] = body['storage_cap_bytes']
                         url = settings['source_url']
                         cap = settings['storage_cap_bytes']
-                        if not isinstance(url, str) or urlsplit(url).scheme not in {'http', 'https'} or (not urlsplit(url).hostname) or any((c in url for c in '\n\r')):
+                        if not isinstance(url, str) or (url and (urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).hostname or any(c in url for c in '\n\r'))):
                             raise web.HTTPBadRequest(text='Source must be a direct HTTP(S) stream URL')
                         if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1024 ** 2:
                             raise web.HTTPBadRequest(text='Cap must be an integer of at least 1048576 bytes')
                         service.settings = settings
+                        service.relay.invalidate_preview()
                         service.db.execute('INSERT OR REPLACE INTO settings VALUES(1,?)', (json.dumps(settings),))
                         service.db.commit()
                         service.space(0)
-                    return web.json_response(service.settings)
+                    visible = public_source(service.settings)
+                    visible['auth_enabled'] = access.state['enabled']
+                    visible['preview_url'] = service.relay.register(source_config(service.settings)) if visible['source_configured'] else ''
+                    return web.json_response(visible)
                 if route == 'status':
-                    return web.json_response({'active': service.active(), 'storage': service.usage()})
+                    configured = bool(service.settings['source_url'])
+                    return web.json_response({'active': public_record(service.active()), 'storage': service.usage(), 'source_configured': configured, 'preview_url': service.relay.register(source_config(service.settings)) if configured else ''})
                 if route == 'recordings' and method == 'GET':
-                    return web.json_response(sorted(service.records.values(), key=lambda r: r['started_at'], reverse=True))
+                    return web.json_response([public_record(r) for r in sorted(service.records.values(), key=lambda r: r['started_at'], reverse=True)])
                 if route == 'recordings' and method == 'POST':
                     duration = body.get('duration_seconds')
                     if duration is not None and (isinstance(duration, bool) or not isinstance(duration, (float, int)) or (not 0 < duration <= 31536000)):
                         raise web.HTTPBadRequest(text='Duration must be positive seconds, at most one year')
                     if service.active():
                         raise web.HTTPConflict(text='Recorder busy capturing or processing')
+                    if not service.settings['source_url']:
+                        raise web.HTTPBadRequest(text='Configure a stream in Settings before starting a recording')
                     if not service.space(16 * 1024 ** 2):
                         raise web.HTTPInsufficientStorage(text='Insufficient cap or disk headroom; delete or unpin recordings')
                     now = dt.datetime.now(dt.timezone.utc)
                     ident = uuid.uuid4().hex
                     r = {'id': ident, 'state': 'recording', 'started_at': now.isoformat(), 'deadline': (now + dt.timedelta(seconds=duration)).isoformat() if duration else None, 'filename': now.strftime('%Y-%m-%d_%H-%M-%S_UTC') + '_' + ident[:8] + '.mp4', 'source_url': service.settings['source_url'], 'pinned': False, 'progress': 0, 'error': None, 'interruptions': [], 'stop_requested': False}
                     service.records[ident] = r
+                    r['source_config'] = source_config(service.settings)
+                    r.pop('source_url', None)
                     service.save(r)
                     service.task = asyncio.create_task(service.run(r))
-                    return web.json_response(r, status=201)
+                    return web.json_response(public_record(r), status=201)
                 parts = route.split('/')
                 ident = body.get('recording_id') if route == 'stop' else parts[1] if len(parts) > 1 else None
                 if ident is not None and (not isinstance(ident, str) or not ident):
@@ -345,7 +365,7 @@ def create_app(path=None):
                 if route == 'stop' or action == 'stop':
                     r['stop_requested'] = True
                     service.save(r)
-                    return web.json_response(r)
+                    return web.json_response(public_record(r))
                 if action == 'download':
                     if r['state'] != 'ready':
                         raise web.HTTPConflict(text='Recording is not ready')
@@ -360,7 +380,7 @@ def create_app(path=None):
                         raise web.HTTPConflict(text='Recording media is in use')
                     service.remove(r)
                     return web.json_response({'deleted': ident})
-                return web.json_response(r)
+                return web.json_response(public_record(r))
         except (json.JSONDecodeError, ValueError, TypeError):
             raise web.HTTPBadRequest(text='Invalid request JSON or values')
 
@@ -369,6 +389,7 @@ def create_app(path=None):
     app.router.add_get('/api/health', health)
     app.router.add_route('*', '/api/{tail:.*}', api)
     app.router.add_get('/health', health)
+    app.router.add_get('/preview/{token}', service.relay.handle)
     app.on_startup.append(service.startup)
     app.on_cleanup.append(service.shutdown)
     static = Path(__file__).parent / 'static'

@@ -5,6 +5,8 @@ import json
 import secrets
 import time
 import uuid
+import asyncio
+from urllib.parse import urlsplit
 from aiohttp import web
 
 COOKIE = 'recorder_session'
@@ -39,8 +41,12 @@ class Access:
     def csrf(self, request, session):
         if request.method not in SAFE and not hmac.compare_digest(request.headers.get('X-CSRF-Token', ''), session['csrf_token']):
             raise web.HTTPForbidden(text='CSRF token required')
+        self.origin(request)
+
+    def origin(self, request):
         origin = request.headers.get('Origin')
-        if origin and origin != f'{request.scheme}://{request.host}':
+        expected = self.state.get('public_url') or self.state.get('oidc', {}).get('public_url') or f'{request.scheme}://{request.host}'
+        if origin and origin != expected:
             raise web.HTTPForbidden(text='Origin does not match this application')
 
     def require_admin(self, request):
@@ -71,7 +77,13 @@ class Access:
             admin_operation |= request.method == 'DELETE' or request.path.startswith('/api/auth/keys/')
             if admin_operation and role != 'admin':
                 raise web.HTTPForbidden(text='Administrator permission required')
-        return await handler(request)
+        try:
+            response = await handler(request)
+            if request.path.startswith('/api/auth/'):
+                response.headers['Cache-Control'] = 'no-store'
+            return response
+        except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
+            raise web.HTTPBadRequest(text='Invalid request JSON or values')
 
     async def status(self, request):
         session = self.session(request)
@@ -81,34 +93,55 @@ class Access:
     async def config(self, request):
         self.require_admin(request)
         if request.method == 'GET':
-            return web.json_response({'enabled':self.state['enabled'], 'username':(self.state['admin'] or {}).get('username')})
+            return web.json_response({'enabled':self.state['enabled'], 'username':(self.state['admin'] or {}).get('username'), 'public_url':self.state.get('public_url', '')})
         body = await request.json()
+        if not isinstance(body, dict):
+            raise web.HTTPBadRequest(text='JSON object required')
         updated = dict(self.state)
+        if 'public_url' in body:
+            value = body['public_url']
+            parsed = urlsplit(value) if isinstance(value, str) else None
+            try:
+                if parsed:
+                    parsed.port  # Reject invalid ports before persisting cookie/origin policy.
+            except ValueError:
+                raise web.HTTPBadRequest(text='Public URL must be an HTTPS origin') from None
+            if not parsed or parsed.scheme != 'https' or not parsed.hostname or parsed.path not in {'', '/'} or parsed.query or parsed.fragment or parsed.username:
+                raise web.HTTPBadRequest(text='Public URL must be an HTTPS origin')
+            updated['public_url'] = value.rstrip('/')
         if 'password' in body or 'username' in body:
             username, password = body.get('username'), body.get('password')
-            if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or len(password) < 12:
+            if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not 12 <= len(password) <= 1024:
                 raise web.HTTPBadRequest(text='Administrator username and password of at least 12 characters required')
             salt = secrets.token_hex(16)
-            updated['admin'] = {'username':username.strip(), 'salt':salt, 'hash':password_hash(password, salt)}
+            updated['admin'] = {'username':username.strip(), 'salt':salt, 'hash':await asyncio.to_thread(password_hash, password, salt)}
         enabled = body.get('enabled', updated['enabled'])
         if not isinstance(enabled, bool) or (enabled and not updated['admin']):
             raise web.HTTPBadRequest(text='Create a local administrator before enabling authentication')
         updated['enabled'] = enabled
+        previously_enabled = self.state['enabled']
         self.state = updated
         self.save()
+        if 'password' in body or enabled != previously_enabled:
+            self.sessions.clear()
         return web.json_response({'enabled':enabled, 'username':(updated['admin'] or {}).get('username')})
 
     def sign_in(self, request, role):
+        self.sessions = {k:v for k,v in self.sessions.items() if v['expires'] > time.time()}
         raw = secrets.token_urlsafe(32)
         session = {'role':role, 'csrf_token':secrets.token_urlsafe(32), 'expires':time.time() + 8 * 3600}
         self.sessions[digest(raw)] = session
         response = web.json_response({'role':role, 'csrf_token':session['csrf_token']})
-        response.set_cookie(COOKIE, raw, httponly=True, secure=request.secure, samesite='Lax', max_age=8 * 3600, path='/')
+        public_url = self.state.get('public_url') or self.state.get('oidc', {}).get('public_url', '')
+        response.set_cookie(COOKIE, raw, httponly=True, secure=request.secure or public_url.startswith('https://'), samesite='Lax', max_age=8 * 3600, path='/')
         response.headers['Cache-Control'] = 'no-store'
         return response
 
     async def login(self, request):
+        self.origin(request)
         body = await request.json()
+        if not isinstance(body, dict):
+            raise web.HTTPBadRequest(text='JSON object required')
         slot = self.attempts.setdefault(request.remote, [])
         slot[:] = [t for t in slot if t > time.time() - 60]
         if len(slot) >= 10:
@@ -116,7 +149,7 @@ class Access:
         slot.append(time.time())
         admin = self.state['admin']
         password = body.get('password')
-        if not admin or not isinstance(password, str) or body.get('username') != admin['username'] or not hmac.compare_digest(password_hash(password, admin['salt']), admin['hash']):
+        if not admin or not isinstance(password, str) or len(password) > 1024 or body.get('username') != admin['username'] or not hmac.compare_digest(await asyncio.to_thread(password_hash, password, admin['salt']), admin['hash']):
             raise web.HTTPUnauthorized(text='Invalid username or password')
         return self.sign_in(request, 'admin')
 
@@ -138,6 +171,8 @@ class Access:
             self.save()
             return web.json_response({'revoked':ident})
         body = await request.json()
+        if not isinstance(body, dict):
+            raise web.HTTPBadRequest(text='JSON object required')
         role, label = body.get('role', 'operator'), body.get('label')
         if role not in {'operator', 'admin'} or not isinstance(label, str) or not label.strip() or len(label) > 200:
             raise web.HTTPBadRequest(text='A label and operator/admin role are required')
@@ -152,12 +187,19 @@ class Access:
 
 def install(app, service):
     access = Access(service)
+    from recorder.oidc import OIDC
+    oidc = OIDC(access)
     app.middlewares.append(access.middleware)
     app.router.add_get('/api/auth/status', access.status)
-    app.router.add_route('*', '/api/auth/config', access.config)
+    app.router.add_get('/api/auth/config', access.config)
+    app.router.add_post('/api/auth/config', access.config)
     app.router.add_post('/api/auth/login', access.login)
     app.router.add_post('/api/auth/logout', access.logout)
     app.router.add_get('/api/auth/keys', access.keys)
     app.router.add_post('/api/auth/keys', access.keys)
     app.router.add_delete('/api/auth/keys/{ident}', access.keys)
+    app.router.add_get('/api/auth/oidc/config', oidc.config)
+    app.router.add_post('/api/auth/oidc/config', oidc.config)
+    app.router.add_get('/api/auth/oidc/login', oidc.login)
+    app.router.add_get('/api/auth/oidc/callback', oidc.callback)
     return access

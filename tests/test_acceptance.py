@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import socket
 import subprocess
 import sys
@@ -27,6 +28,7 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.media = self.root / 'hls'
         self.media.mkdir()
         self.offline = False
+        self.source_requests = []
         self.fixture_log = (self.root / 'fixture.log').open('wb')
         self.fixture = subprocess.Popen([
             'ffmpeg', '-hide_banner', '-loglevel', 'error', '-re',
@@ -37,6 +39,9 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
             '-hls_list_size', '6', '-hls_flags', 'delete_segments',
             str(self.media / 'stream.m3u8')], stdout=self.fixture_log, stderr=self.fixture_log)
         async def serve(request):
+            self.source_requests.append(request.path_qs)
+            if getattr(self, 'required_headers', None) and any(request.headers.get(k) != v for k, v in self.required_headers.items()):
+                raise web.HTTPUnauthorized()
             if self.offline:
                 raise web.HTTPServiceUnavailable()
             path = self.media / request.match_info['name']
@@ -58,14 +63,48 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.port = unused_port()
         self.base = f'http://127.0.0.1:{self.port}'
         self.source = f'http://127.0.0.1:{self.fixture_port}/stream.m3u8'
-        self.client = aiohttp.ClientSession()
+        # Isolated loopback fixture: accept host-IP session cookies like a browser.
+        self.client = aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True))
         self.process = None
         try:
             await self.start_server()
+            _, fresh = await self.request('GET', '/api/settings')
+            self.assertEqual(fresh['source_url'], '')
+            self.assertFalse(fresh['auth_enabled'])
             await self.request('PUT', '/api/settings', {'source_url': self.source, 'storage_cap_bytes': 100_000_000})
         except BaseException:
             await self.asyncTearDown()
             raise
+
+    async def test_empty_source_disables_admission_and_survives_restart(self):
+        await self.request('PUT', '/api/settings', {'source_url': ''})
+        status, error = await self.request('POST', '/api/recordings', {}, check=False)
+        self.assertEqual(status, 400)
+        self.assertIn('Settings', error if isinstance(error, str) else str(error))
+        _, state = await self.request('GET', '/api/status')
+        self.assertIsNone(state['active'])
+        await self.kill_server()
+        await self.start_server()
+        _, settings = await self.request('GET', '/api/settings')
+        self.assertEqual(settings['source_url'], '')
+        self.assertFalse(settings['auth_enabled'])
+
+    async def test_upgrade_fills_missing_settings_without_replacing_legacy_source(self):
+        recording = await self.capture(2)
+        await self.request('PATCH', f"/api/recordings/{recording['id']}", {'pinned': True})
+        await self.kill_server()
+        # Pre-upgrade fixture: the original release stored only these two fields.
+        legacy = {'source_url': 'https://ch91.gvsit.org/hls/test.m3u8', 'storage_cap_bytes': 100_000_000}
+        with sqlite3.connect(self.root / 'data' / 'state.sqlite') as db:
+            db.execute('UPDATE settings SET payload=? WHERE id=1', (json.dumps(legacy),))
+        await self.start_server()
+        _, settings = await self.request('GET', '/api/settings')
+        self.assertEqual(settings['source_url'], legacy['source_url'])
+        self.assertEqual(settings['storage_cap_bytes'], 100_000_000)
+        self.assertFalse(settings['auth_enabled'])
+        _, saved = await self.request('GET', f"/api/recordings/{recording['id']}")
+        self.assertTrue(saved['pinned'])
+        await self.playable(saved)
 
     async def start_server(self):
         self.server_log = (self.root / 'server.log').open('ab')
@@ -107,8 +146,8 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.fixture_log.close()
         self.temp.cleanup()
 
-    async def request(self, method, route, body=None, check=True):
-        async with self.client.request(method, self.base + route, json=body) as response:
+    async def request(self, method, route, body=None, check=True, headers=None):
+        async with self.client.request(method, self.base + route, json=body, headers=headers) as response:
             raw = await response.read()
             try:
                 result = json.loads(raw)
@@ -117,6 +156,48 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
             if check:
                 self.assertLess(response.status, 300, (response.status, result))
             return response.status, result
+
+    async def test_combined_access_and_protected_capture_survive_replacement(self):
+        self.required_headers = {'Authorization':'Bearer upgrade-fixture-token', 'X-Stream-Access':'upgrade-fixture-header'}
+        await self.request('PUT', '/api/settings', {'source_bearer_token':'upgrade-fixture-token', 'source_headers':{'X-Stream-Access':'upgrade-fixture-header'}})
+        await self.request('POST', '/api/auth/oidc/config', {'issuer':'https://id.example.org', 'client_id':'recorder', 'client_secret':'upgrade-oidc-secret', 'public_url':self.base, 'group_claim':'groups', 'operator_groups':['recorder-operators'], 'admin_groups':['recorder-admins'], 'enabled':True})
+        _, operator = await self.request('POST', '/api/auth/keys', {'label':'upgrade operator'})
+        _, administrator = await self.request('POST', '/api/auth/keys', {'label':'upgrade administrator', 'role':'admin'})
+        await self.request('POST', '/api/auth/config', {'username':'recovery-admin', 'password':'upgrade-fixture-password', 'enabled':True})
+        await self.kill_server()
+        await self.start_server()
+        self.assertEqual((await self.request('GET', '/api/status', check=False))[0], 401)
+        admin_headers = {'Authorization':'Bearer '+administrator['key']}
+        operator_headers = {'Authorization':'Bearer '+operator['key']}
+        _, settings = await self.request('GET', '/api/settings', headers=admin_headers)
+        self.assertEqual(settings['source_url'], self.source)
+        self.assertEqual(settings['storage_cap_bytes'], 100_000_000)
+        self.assertNotIn('upgrade-fixture-token', str(settings))
+        self.assertNotIn('upgrade-fixture-header', str(settings))
+        _, oidc = await self.request('GET', '/api/auth/oidc/config', headers=admin_headers)
+        self.assertEqual(oidc['operator_groups'], ['recorder-operators'])
+        self.assertEqual(oidc['admin_groups'], ['recorder-admins'])
+        self.assertTrue(oidc['enabled'])
+        self.assertTrue(oidc['client_secret_saved'])
+        self.assertNotIn('upgrade-oidc-secret', str(oidc))
+        self.assertEqual((await self.request('PUT', '/api/settings', {}, check=False, headers=operator_headers))[0], 403)
+        _, status = await self.request('GET', '/api/status', headers=operator_headers)
+        _, playlist = await self.request('GET', status['preview_url'], headers=operator_headers)
+        self.assertIn(b'#EXTM3U', playlist)
+        self.assertNotIn(b'upgrade-fixture', playlist)
+        self.assertEqual((await self.request('GET', status['preview_url'], check=False))[0], 401)
+        # Persistent operator key and saved upstream credentials must still produce media.
+        self.client.headers.update(operator_headers)
+        recording = await self.capture(3)
+        await self.request('PATCH', f"/api/recordings/{recording['id']}", {'pinned':True})
+        await self.playable(recording)
+        self.assertEqual((await self.request('DELETE', f"/api/recordings/{recording['id']}", check=False))[0], 403)
+        self.client.headers.clear()
+        await self.request('POST', '/api/auth/login', {'username':'recovery-admin', 'password':'upgrade-fixture-password'})
+        _, signed_in = await self.request('GET', '/api/auth/status')
+        self.assertEqual(signed_in['role'], 'admin')
+        await self.request('DELETE', '/api/auth/keys/'+operator['id'], headers={'X-CSRF-Token':signed_in['csrf_token']})
+        self.assertEqual((await self.request('GET', '/api/status', check=False, headers=operator_headers))[0], 401)
 
     async def wait_terminal(self, recording_id, timeout=35):
         for _ in range(int(timeout * 5)):
@@ -153,6 +234,24 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         _, recordings = await self.request('GET', '/api/recordings')
         self.assertEqual([r['id'] for r in recordings], [recording['id']])
 
+    async def test_protected_preview_and_playable_capture(self):
+        for credentials, required in [
+            ({'source_basic_username': 'user', 'source_basic_password': 'secret'}, {'Authorization': 'Basic dXNlcjpzZWNyZXQ='}),
+            ({'source_basic_username': '', 'source_bearer_token': 'bearer-secret'}, {'Authorization': 'Bearer bearer-secret'}),
+            ({'source_headers': {'X-Access': 'header-secret'}}, {'X-Access': 'header-secret'}),
+        ]:
+            self.required_headers = required
+            credentials['clear_source_secrets'] = ['source_basic_password', 'source_bearer_token', 'source_headers']
+            # Remove only credentials not replaced in this request.
+            credentials['clear_source_secrets'] = [key for key in credentials['clear_source_secrets'] if key not in credentials]
+            _, visible = await self.request('PUT', '/api/settings', credentials)
+            _, playlist = await self.request('GET', visible['preview_url'])
+            self.assertTrue(playlist.startswith(b'#EXTM3U'))
+            recording = await self.capture()
+            await self.playable(recording)
+            self.assertNotIn('source_config', recording)
+            self.assertEqual(recording.get('source_url'), self.source)
+
     async def test_only_one_racing_start_and_targeted_stop_is_retry_safe(self):
         results = await asyncio.gather(*(self.request('POST', '/api/recordings', {}, check=False) for _ in range(8)))
         winners = [r for status, r in results if status == 201]
@@ -180,7 +279,28 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed['source_url'], self.source)
         self.assertEqual(completed['deadline'], first['deadline'])
         second = await self.capture()
-        self.assertEqual(second['source_url'], next_source)
+        self.assertNotIn('source_url', second)
+        self.assertIn('/stream.m3u8?next=1', self.source_requests)
+
+    async def test_protected_admitted_source_survives_edit_and_restart(self):
+        self.required_headers = {'Authorization': 'Bearer admitted-secret'}
+        await self.request('PUT', '/api/settings', {'source_bearer_token': 'admitted-secret'})
+        _, recording = await self.request('POST', '/api/recordings', {})
+        await asyncio.sleep(3)
+        await self.request('PUT', '/api/settings', {'source_bearer_token': 'new-secret', 'source_url': self.source + '?future=1'})
+        await self.kill_server()
+        await self.start_server()
+        await asyncio.sleep(3)
+        await self.request('POST', '/api/stop', {'recording_id': recording['id']})
+        recovered = await self.wait_terminal(recording['id'])
+        self.assertEqual(recovered['state'], 'ready', recovered)
+        metadata = await self.playable(recovered)
+        self.assertGreater(float(metadata['format']['duration']), 3)
+        self.assertNotIn('/stream.m3u8?future=1', self.source_requests)
+        _, settings = await self.request('GET', '/api/settings')
+        self.assertTrue(settings['source_bearer_token_configured'])
+        status, _ = await self.request('GET', settings['preview_url'], check=False)
+        self.assertEqual(status, 502)
 
     async def test_pinned_download_and_settings_survive_restart_then_manual_delete(self):
         first = await self.capture()
@@ -308,9 +428,11 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         node_modules = os.environ.get('NODE_PATH') or os.environ.get('CODEX_PRIMARY_RUNTIME_NODE_MODULES') or ''
         if not os.environ.get('RUN_BROWSER_TESTS'):
             self.skipTest('Set RUN_BROWSER_TESTS=1 after installing Playwright Chromium')
+        self.required_headers = {'Authorization':'Bearer browser-fixture-token', 'X-Stream-Access':'browser-fixture-header'}
+        await self.request('PUT', '/api/settings', {'source_bearer_token':'browser-fixture-token', 'source_headers':{'X-Stream-Access':'browser-fixture-header'}})
         result = await asyncio.to_thread(subprocess.run, ['node', 'tests/browser-smoke.cjs'],
             env={**os.environ, 'NODE_PATH': node_modules, 'RECORDER_URL': self.base},
-            capture_output=True, timeout=65)
+            capture_output=True, timeout=150)
         self.assertEqual(result.returncode, 0, result.stdout.decode() + result.stderr.decode())
 
     async def test_processing_recovers_without_duplicate_recording(self):

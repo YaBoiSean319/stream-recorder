@@ -6,7 +6,7 @@ const source = fs.readFileSync('recorder/static/app.js', 'utf8').split('function
 function previewWith(mse, native) {
   const calls = [];
   const video = {canPlayType: () => native};
-  const elements = {'preview': video, 'source-label': {}, 'preview-message': {}};
+  const elements = {'preview': video, 'source-label': {}, 'preview-message': {}, 'open-settings': {}};
   class Hls {
     static isSupported() { return mse; }
     static Events = {ERROR: 'error'};
