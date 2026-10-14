@@ -69,6 +69,8 @@ class Recorder:
         return {'media_bytes': media_bytes, 'cap_bytes': cap, 'total_bytes': disk.total, 'free_bytes': disk.free, 'cap_exceeded': media_bytes > cap}
 
     def remove(self, r):
+        if hasattr(self, 'uploads') and self.uploads.protected(r['id']):
+            raise ValueError('Upload protects this recording')
         shutil.rmtree(self.media / r['id'], ignore_errors=True)
         self.records.pop(r['id'])
         self.db.execute('DELETE FROM records WHERE id=?', (r['id'],))
@@ -79,7 +81,7 @@ class Recorder:
             u = self.usage()
             if u['media_bytes'] + need <= u['cap_bytes'] and u['free_bytes'] >= need:
                 return True
-            if r['state'] == 'ready' and (not r['pinned']):
+            if r['state'] == 'ready' and (not r['pinned']) and not (hasattr(self, 'uploads') and self.uploads.protected(r['id'])):
                 self.remove(r)
         u = self.usage()
         return u['media_bytes'] + need <= u['cap_bytes'] and u['free_bytes'] >= need
@@ -320,6 +322,8 @@ def create_app(path=None):
     access = install(app, service)
     from recorder.youtube import install as install_youtube
     install_youtube(app, service, access)
+    from recorder.uploads import install as install_uploads
+    install_uploads(app, service, app['youtube_connection'])
     app[web.AppKey('recorder', Recorder)] = service
     from recorder.branding import install as install_branding
     install_branding(app, service)
@@ -482,8 +486,8 @@ def create_app(path=None):
                         r['pinned'] = body['pinned']
                     service.save(r)
                 if method == 'DELETE':
-                    if r['state'] in ACTIVE:
-                        raise web.HTTPConflict(text='Recording media is in use')
+                    if r['state'] in ACTIVE or service.uploads.protected(r['id']):
+                        raise web.HTTPConflict(text='Recording media is in use or protected by an upload')
                     service.remove(r)
                     return web.json_response({'deleted': ident})
                 return web.json_response(public_record(r))

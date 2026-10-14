@@ -41,6 +41,8 @@ def operation(request):
         return 'recordings:read' if method == 'GET' else 'recordings:start'
     if path == '/stop' or path.endswith('/stop') and path.startswith('/recordings/'):
         return 'recordings:stop'
+    if path.startswith('/recordings/') and path.endswith('/uploads'):
+        return 'uploads:read' if method == 'GET' else 'uploads:create'
     if path.startswith('/recordings/'):
         if path.endswith('/download'):
             return 'recordings:download'

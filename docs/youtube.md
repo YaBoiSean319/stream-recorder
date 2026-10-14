@@ -24,3 +24,15 @@ All routes below require `youtube:manage` and use the ordinary API key or Admini
 | `DELETE /api/v1/youtube/connection` | Disconnect shared authorization |
 
 Use `https://www.youtube.com/channel/<channel ID>` to inspect the selected channel. Upload settings and upload operations are handled separately; a connection alone does not publish a video.
+
+## Upload a completed recording
+
+Choose **Upload to YouTube** beside a ready recording. The connected channel is shown before submission. A title is filled from the current recording title, while description, tags, category (default `22`), visibility (default **Unlisted**), subscriber notifications (off), and audience are editable. You must explicitly choose whether the video is made for kids. Metadata is fixed when the job is queued; renaming the local recording later leaves it untouched.
+
+Only one upload transfers at a time. The recording displays the upload state, bytes sent, attempts, errors, and a copyable `youtube.com/watch?v=...` link when YouTube acknowledges creation. Processing and the video's actual visibility may change on YouTube; verify them in YouTube Studio. Some unverified Google API projects have visibility restrictions. The local MP4 remains available.
+
+Uploads persist through application restarts. An interrupted session is probed before sending bytes again. Transient errors retry up to five times with delays; **Retry** restarts probing of the same session. **Cancel upload** stops future chunks without deleting a video already created. A queued or active job and an unreleased failed or uncertain job protect local media from cap cleanup and deliberate deletion, independently of pinning. **Release protection** on a stopped job permits cleanup and deletion. If YouTube's final outcome cannot be verified because a session expired, the job becomes **uncertain**: inspect your channel before choosing **Upload again**. That explicit action may create a second video. Disconnect pauses work; reconnecting the same channel allows retry, while a different channel requires an explicit new job.
+
+### Upload API
+
+`GET /api/v1/uploads` lists jobs newest first; `GET /api/v1/uploads/{job_id}` gets a job. `GET /api/v1/recordings/{recording_id}/uploads` filters the list. `POST /api/v1/recordings/{recording_id}/uploads` creates a job, accepting `title`, `description`, `privacy_status` (`unlisted`, `private`, `public`), `made_for_kids` (required Boolean), `notify_subscribers`, `tags` (array), and `category_id` (numeric string). Send `Idempotency-Key` for caller-scoped replay protection. `POST /api/v1/uploads/{job_id}/retry`, `/cancel`, `/release`, and `/requeue` control the job. Uncertain requeue requires `{"reconciled":true}` after checking the channel. Browser requests use CSRF; API keys require `uploads:read`, `uploads:create`, `uploads:retry`, or `uploads:cancel` as appropriate. The API never returns OAuth tokens or resumable session URLs.

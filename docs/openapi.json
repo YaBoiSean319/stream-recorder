@@ -1833,6 +1833,249 @@
           }
         }
       }
+    },
+    "/api/v1/uploads": {
+      "get": {
+        "operationId": "listUploads",
+        "summary": "List YouTube upload jobs",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}": {
+      "get": {
+        "operationId": "getUpload",
+        "summary": "Get one upload job",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{recording_id}/uploads": {
+      "get": {
+        "operationId": "listRecordingUploads",
+        "summary": "List uploads for recording",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRecordingUpload",
+        "summary": "Queue a YouTube upload",
+        "x-permission": "uploads:create",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}/retry": {
+      "post": {
+        "operationId": "RetryUpload",
+        "summary": "Retry upload",
+        "x-permission": "uploads:retry",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}/cancel": {
+      "post": {
+        "operationId": "CancelUpload",
+        "summary": "Cancel upload",
+        "x-permission": "uploads:cancel",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}/requeue": {
+      "post": {
+        "operationId": "RequeueUpload",
+        "summary": "Requeue upload",
+        "x-permission": "uploads:retry",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}/release": {
+      "post": {
+        "operationId": "ReleaseUpload",
+        "summary": "Release upload",
+        "x-permission": "uploads:cancel",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/channel": {
+      "get": {
+        "operationId": "getUploadChannel",
+        "summary": "Read selected upload channel identity",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Selected channel and connection state"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2171,6 +2414,51 @@
           "text": {
             "type": "string",
             "description": "Hex or CSS rgb() color"
+          }
+        }
+      },
+      "YouTubeUpload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "recording_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "uploading",
+              "paused",
+              "failed",
+              "uncertain",
+              "completed",
+              "canceled",
+              "released"
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "channel_id": {
+            "type": "string"
+          },
+          "acknowledged_bytes": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }
