@@ -100,6 +100,7 @@ module.exports = async function appearance(browser, base) {
     await page.getByRole('button',{name:'Clear light logo'}).click();
     assert.equal(await page.locator('.brand-image').isVisible(),false);
     await page.getByRole('button',{name:'Discard preview'}).click();
+    await page.locator('.brand-image').waitFor({state:'visible'});
     assert.equal(await page.locator('.brand-image').isVisible(),true);
     await page.getByRole('button',{name:'Reset branding'}).click();
     await page.getByText('Branding reset.').waitFor();

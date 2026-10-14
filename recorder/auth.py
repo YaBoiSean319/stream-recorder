@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import math
 import secrets
 import time
 import uuid
@@ -51,7 +52,13 @@ def operation(request):
     if path.startswith('/auth/'):
         return 'auth:manage'
     if path.startswith('/uploads'):
-        return 'uploads:read' if method == 'GET' else 'uploads:create'
+        if method == 'GET':
+            return 'uploads:read'
+        if path.endswith('/retry') or path.endswith('/requeue'):
+            return 'uploads:retry'
+        if path.endswith('/cancel') or path.endswith('/release'):
+            return 'uploads:cancel'
+        return 'uploads:create'
     if path.startswith('/youtube'):
         return 'youtube:manage'
     if path.startswith('/webhooks'):
@@ -124,7 +131,7 @@ class Access:
     async def authorize(self, request, handler):
         op = operation(request)
         public = request.path in {'/health', '/api/health', '/api/v1/health'} or op in {'auth:public', 'branding:read'} or request.path.startswith('/static/') or request.path in {'/', '/login'}
-        role = 'admin' if not self.state['enabled'] else None
+        role = 'admin' if not self.state['enabled'] and not self.state.get('require_api_key') else None
         session = self.session(request)
         authorization = request.headers.get('Authorization')
         if authorization:
@@ -159,8 +166,6 @@ class Access:
         if not public:
             if role is None:
                 raise web.HTTPUnauthorized(text='Sign in required')
-            if self.state.get('require_api_key') and request.path.startswith('/api/') and not authorization and not (session and session['expires'] > time.time()):
-                raise web.HTTPUnauthorized(text='API key required for machine requests')
             if op in ADMIN_PERMISSIONS - OPERATOR_PERMISSIONS and role != 'admin':
                 raise web.HTTPForbidden(text='Administrator permission required')
         try:
@@ -174,7 +179,12 @@ class Access:
     async def status(self, request):
         session = self.session(request)
         valid = session and session['expires'] > time.time()
-        return web.json_response({'enabled': self.state['enabled'], 'role': session['role'] if valid else ('admin' if not self.state['enabled'] else None), 'csrf_token':session['csrf_token'] if valid else None, 'sso_enabled':bool(self.state.get('oidc', {}).get('enabled'))})
+        browser_login_required = self.state['enabled'] or self.state.get('require_api_key', False)
+        return web.json_response({'enabled': browser_login_required, 'role': session['role'] if valid else ('admin' if not browser_login_required else None), 'csrf_token':session['csrf_token'] if valid else None, 'sso_enabled':bool(self.state.get('oidc', {}).get('enabled'))})
+
+    async def permissions(self, request):
+        self.require_admin(request)
+        return web.json_response({'operator': sorted(OPERATOR_PERMISSIONS), 'admin': sorted(ADMIN_PERMISSIONS)})
 
     async def config(self, request):
         self.require_admin(request)
@@ -208,8 +218,8 @@ class Access:
         if not isinstance(enabled, bool) or (enabled and not updated['admin']):
             raise web.HTTPBadRequest(text='Create a local administrator before enabling authentication')
         require_key = body.get('require_api_key', updated.get('require_api_key', False))
-        if not isinstance(require_key, bool) or (require_key and (not enabled or not updated['admin'])):
-            raise web.HTTPBadRequest(text='Enable authentication and a recovery administrator before requiring API keys')
+        if not isinstance(require_key, bool) or (require_key and not updated['admin']):
+            raise web.HTTPBadRequest(text='Configure a local recovery administrator before requiring API keys')
         updated['require_api_key'] = require_key
         updated['enabled'] = enabled
         previously_enabled = self.state['enabled']
@@ -274,7 +284,7 @@ class Access:
         if not isinstance(permissions, list) or not permissions or any(not isinstance(p, str) or p not in available for p in permissions) or len(set(permissions)) != len(permissions):
             raise web.HTTPBadRequest(text='Permissions must be a nonempty, unique list allowed for the role')
         expires_at = body.get('expires_at')
-        if expires_at is not None and (isinstance(expires_at, bool) or not isinstance(expires_at, (float, int)) or expires_at <= time.time()):
+        if expires_at is not None and (isinstance(expires_at, bool) or not isinstance(expires_at, (float, int)) or not math.isfinite(expires_at) or expires_at <= time.time()):
             raise web.HTTPBadRequest(text='expires_at must be a future Unix timestamp')
         raw = secrets.token_urlsafe(32)
         key = {'id':uuid.uuid4().hex, 'label':label.strip(), 'role':role, 'permissions':permissions,
@@ -297,6 +307,7 @@ def install(app, service):
     app.router.add_post('/api/auth/login', access.login)
     app.router.add_post('/api/auth/logout', access.logout)
     app.router.add_get('/api/auth/keys', access.keys)
+    app.router.add_get('/api/auth/permissions', access.permissions)
     app.router.add_post('/api/auth/keys', access.keys)
     app.router.add_delete('/api/auth/keys/{ident}', access.keys)
     app.router.add_get('/api/auth/oidc/config', oidc.config)
@@ -309,6 +320,7 @@ def install(app, service):
     app.router.add_post('/api/v1/auth/login', access.login)
     app.router.add_post('/api/v1/auth/logout', access.logout)
     app.router.add_get('/api/v1/auth/keys', access.keys)
+    app.router.add_get('/api/v1/auth/permissions', access.permissions)
     app.router.add_post('/api/v1/auth/keys', access.keys)
     app.router.add_delete('/api/v1/auth/keys/{ident}', access.keys)
     app.router.add_get('/api/v1/auth/oidc/config', oidc.config)

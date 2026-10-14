@@ -1494,6 +1494,49 @@
           }
         }
       }
+    },
+    "/api/v1/auth/permissions": {
+      "get": {
+        "operationId": "auth_permissions_get",
+        "summary": "List selectable operations by role",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Operation permissions for operator and administrator keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "operator",
+                    "admin"
+                  ],
+                  "properties": {
+                    "operator": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "admin": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1811,11 +1854,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string"
-            }
+            },
+            "minItems": 1,
+            "description": "Subset of operations allowed for the selected role. Omit for the full role permission set."
           },
           "expires_at": {
             "type": "number",
-            "description": "Future Unix timestamp"
+            "description": "Future Unix timestamp in seconds; omit for a key without expiry."
           }
         }
       }

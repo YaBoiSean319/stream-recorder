@@ -48,7 +48,10 @@ video{background:#090909}
 .branding-actions{display:flex;gap:8px;flex-wrap:wrap}
 .branding-actions button{flex:1 1 140px}
 #contrast-warnings{min-height:2em}
+.key-scopes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;border:1px solid var(--line);border-radius:8px;margin:8px 0 18px;padding:14px}
+.key-scopes label{overflow-wrap:anywhere;margin:0}.key-result{display:block;overflow-wrap:anywhere;margin:12px 0}.key-row{display:flex;gap:12px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}.key-row span{min-width:0}
 @media(max-width:800px){.branding-colors{grid-template-columns:1fr}}
+@media(max-width:600px){.key-scopes{grid-template-columns:1fr}.key-row{align-items:flex-start;flex-direction:column}}
 @media(max-width:410px){.brand-color{grid-template-columns:minmax(0,1fr) 48px}.brand-color input:last-child{grid-column:1/-1}}
 
 /* Recording titles can be long; controls must wrap on narrow screens. */
