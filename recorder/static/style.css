@@ -23,3 +23,30 @@ button:disabled{opacity:1;color:var(--muted);background:var(--control);border:1p
 .pill.recording{border-color:var(--accent)}
 .usage-track{background:var(--track)}
 input[type=checkbox]{width:auto;accent-color:var(--accent);margin-right:8px}
+
+/* Shared color tokens. Status colors remain independent of the brand palette. */
+:root,:root[data-theme=dark]{
+ color-scheme:dark;
+ --bg:var(--brand-dark-background,#141414);--panel:var(--brand-dark-surface,#242424);
+ --text:var(--brand-dark-text,#f5f5f5);--accent:var(--brand-dark-accent,#c5c5c5);
+ --line:#515151;--muted:#c2c2c2;--input:#1b1b1b;--control:#333;
+ --control-line:#777;--on-accent:var(--brand-dark-on-accent,#111);--track:#4d4d4d
+}
+:root[data-theme=light]{
+ color-scheme:light;
+ --bg:var(--brand-light-background,#f5f5f5);--panel:var(--brand-light-surface,#fff);
+ --text:var(--brand-light-text,#171717);--accent:var(--brand-light-accent,#444);
+ --line:#b5b5b5;--muted:#555;--input:#fff;--control:#e4e4e4;
+ --control-line:#858585;--on-accent:var(--brand-light-on-accent,#fff);--track:#d1d1d1
+}
+video{background:#090909}
+.branding-colors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}
+.brand-color{display:grid;grid-template-columns:minmax(0,1fr) 56px minmax(0,1.2fr);gap:6px;align-items:center}
+.brand-color strong{grid-column:1/-1;text-transform:capitalize;font-size:13px}
+.brand-color input{min-width:0}
+.brand-color input[type=color]{height:44px;padding:3px;cursor:pointer}
+.branding-actions{display:flex;gap:8px;flex-wrap:wrap}
+.branding-actions button{flex:1 1 140px}
+#contrast-warnings{min-height:2em}
+@media(max-width:800px){.branding-colors{grid-template-columns:1fr}}
+@media(max-width:410px){.brand-color{grid-template-columns:minmax(0,1fr) 48px}.brand-color input:last-child{grid-column:1/-1}}

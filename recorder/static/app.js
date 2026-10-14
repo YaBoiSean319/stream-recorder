@@ -31,26 +31,105 @@ function loadSource(settings){$('source').value='';$('source').placeholder=setti
 function navigate(){if(accessState.enabled&&!accessState.role)return;const settings=location.hash==='#settings';$('settings-screen').hidden=!settings;$('recorder-screen').hidden=settings;document.querySelectorAll('nav a').forEach(a=>a.setAttribute('aria-current',a.hash===(settings?'#settings':'#recorder')?'page':'false'));if(settings)$('settings-title').focus();}
 window.addEventListener('hashchange',navigate);navigate();
 
-// Appearance is a browser preference, never shared installation configuration.
+// Theme is a browser preference; prior browser-local accent selections never
+// write shared branding. Retain valid theme choices through the migration.
 const appearanceKey = 'stream-recorder.appearance';
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
-let appearance = {theme:'dark', accent:'mint'};
+let appearance = {theme:'system'};
 try {
  const saved = JSON.parse(localStorage.getItem(appearanceKey));
- if (saved && ['dark','light','system'].includes(saved.theme) && ['mint','blue','rose'].includes(saved.accent)) appearance = saved;
+ if (saved && ['dark','light','system'].includes(saved.theme)) appearance = {theme:saved.theme};
 } catch (_) { /* Unavailable storage or stale preferences keep safe defaults. */ }
 function applyAppearance() {
  document.documentElement.dataset.theme = appearance.theme === 'system' ? (systemTheme.matches ? 'dark' : 'light') : appearance.theme;
- document.documentElement.dataset.accent = appearance.accent;
  $('theme').value = appearance.theme;
- $('accent').value = appearance.accent;
 }
 function saveAppearance() {
- appearance = {theme:$('theme').value, accent:$('accent').value};
+ appearance = {theme:$('theme').value};
  try { localStorage.setItem(appearanceKey, JSON.stringify(appearance)); } catch (_) { /* Still usable for this page session. */ }
  applyAppearance();
 }
 $('theme').addEventListener('change',saveAppearance);
-$('accent').addEventListener('change',saveAppearance);
 systemTheme.addEventListener('change',() => {if(appearance.theme === 'system')applyAppearance();});
 applyAppearance();
+
+const brandingFields = ['accent','background','surface','text'];
+let savedBranding, draftBranding;
+const brandingControls = new Map();
+function normalizeColor(value) {
+ if(/^#[0-9a-f]{3}$/i.test(value))return '#'+[...value.slice(1)].map(c=>c+c).join('').toLowerCase();
+ if(/^#[0-9a-f]{6}$/i.test(value))return value.toLowerCase();
+ const match=/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i.exec(value);
+ if(match && match.slice(1).every(n=>Number(n)<=255))return '#'+match.slice(1).map(n=>Number(n).toString(16).padStart(2,'0')).join('');
+ return null;
+}
+function rgb(hex) {return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));}
+function luminance(hex) {const v=rgb(hex).map(n=>{const c=n/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});return .2126*v[0]+.7152*v[1]+.0722*v[2];}
+function contrast(a,b) {const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+function paintBranding(branding) {
+ document.title=branding.name;
+ document.querySelectorAll('[data-app-name]').forEach(el=>el.textContent=branding.name);
+ document.querySelectorAll('.login-brand-name').forEach(el=>el.textContent=branding.name);
+ for(const theme of ['light','dark']) {
+  for(const field of brandingFields)document.documentElement.style.setProperty(`--brand-${theme}-${field}`,branding[theme][field]);
+  const accent=branding[theme].accent;
+  document.documentElement.style.setProperty(`--brand-${theme}-on-accent`,contrast(accent,'#111111')>=contrast(accent,'#ffffff')?'#111111':'#ffffff');
+ }
+ const warnings=[];
+ for(const theme of ['light','dark']) {
+  for(const [foreground,background] of [['text','background'],['text','surface'],['accent','background']])
+   if(contrast(branding[theme][foreground],branding[theme][background])<4.5)warnings.push(`${theme} ${foreground} on ${background} has low contrast`);
+ }
+ $('contrast-warnings').textContent=warnings.length?'Contrast warning: '+warnings.join('; ')+'.':'Text and accent contrast meet 4.5:1 on both themes.';
+}
+function showBranding(branding) {
+ draftBranding=structuredClone(branding);
+ $('branding-name').value=branding.name;
+ for(const [key,control] of brandingControls) {
+  const [theme,field]=key.split('-'),value=branding[theme][field];
+  control.hex.value=value;control.picker.value=value;control.rgb.value=`rgb(${rgb(value).join(', ')})`;
+ }
+ paintBranding(draftBranding);
+}
+function brandingControl(theme,field) {
+ const group=element('div',undefined,'brand-color');
+ const label=element('strong',`${theme[0].toUpperCase()+theme.slice(1)} ${field}`);
+ const hex=element('input'),picker=element('input'),rgbInput=element('input');
+ hex.id=`brand-${theme}-${field}-hex`;hex.setAttribute('aria-label',`${theme[0].toUpperCase()+theme.slice(1)} ${field} hex`);
+ picker.id=`brand-${theme}-${field}-picker`;picker.type='color';picker.setAttribute('aria-label',`${theme} ${field} color picker`);
+ rgbInput.id=`brand-${theme}-${field}-rgb`;rgbInput.setAttribute('aria-label',`${theme} ${field} RGB`);
+ hex.placeholder='#RRGGBB';rgbInput.placeholder='rgb(0, 0, 0)';
+ const controls={hex,picker,rgb:rgbInput};brandingControls.set(`${theme}-${field}`,controls);
+ for(const [format,input] of Object.entries(controls))input.addEventListener('input',()=>{
+  const normalized=normalizeColor(input.value);
+  input.setCustomValidity(normalized?'':'Enter #RGB, #RRGGBB, or rgb(0–255, 0–255, 0–255)');
+  if(!normalized)return;
+  draftBranding[theme][field]=normalized;
+  for(const [other,el] of Object.entries(controls))if(other!==format){el.value=other==='rgb'?`rgb(${rgb(normalized).join(', ')})`:normalized;el.setCustomValidity('');}
+  paintBranding(draftBranding);
+ });
+ group.append(label,hex,picker,rgbInput);
+ return group;
+}
+for(const theme of ['light','dark'])for(const field of brandingFields)$('branding-colors').append(brandingControl(theme,field));
+$('branding-name').addEventListener('input',()=>{if(!draftBranding)return;draftBranding.name=$('branding-name').value;paintBranding(draftBranding);});
+$('branding-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ try {
+  const result=await api('/api/v1/branding',{method:'PUT',body:JSON.stringify(draftBranding)});
+  savedBranding=result;showBranding(result);notice('Branding saved.');
+ }catch(error){notice(error.message);}
+});
+$('branding-reset').onclick=async()=>{
+ try {const result=await api('/api/v1/branding/reset',{method:'POST',body:'{}'});savedBranding=result;showBranding(result);notice('Branding reset.');}
+ catch(error){notice(error.message);}
+};
+$('branding-cancel').onclick=()=>{if(savedBranding)showBranding(savedBranding);};
+(async()=>{
+ try {
+  const response=await api('/api/v1/branding');
+  savedBranding=response;showBranding(response);
+  const access=await accessReady;
+  if(access.role!=='admin')$('branding-form').hidden=true;
+ }catch(error){notice(error.message);}
+})();

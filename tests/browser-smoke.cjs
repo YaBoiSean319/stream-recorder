@@ -28,16 +28,12 @@ const { chromium } = require('playwright');
     await snapshot(page,'desktop-settings');
     for (const theme of ['dark','light','system']) {
       await page.locator('#theme').selectOption(theme);
-      for (const accent of ['mint','blue','rose']) {
-        await page.locator('#accent').selectOption(accent);
-        await snapshot(page,`desktop-settings-${theme}-${accent}`);
-      }
+      await snapshot(page,`desktop-settings-${theme}`);
     }
     await page.setViewportSize({width:390,height:844});
     await snapshot(page,'mobile-settings');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'Mobile Settings must not overflow horizontally');
     await page.locator('#theme').selectOption('dark');
-    await page.locator('#accent').selectOption('mint');
     await page.setViewportSize({width:1280,height:900});
     await page.locator('#source').fill(saved.source_url);
     await page.locator('#cap').fill('0.2');

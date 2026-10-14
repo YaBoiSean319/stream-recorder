@@ -308,6 +308,8 @@ def create_app(path=None):
     from recorder.auth import install
     access = install(app, service)
     app[web.AppKey('recorder', Recorder)] = service
+    from recorder.branding import install as install_branding
+    install_branding(app, service)
 
     async def api(request):
         try:

@@ -56,6 +56,7 @@ class Access:
     @web.middleware
     async def middleware(self, request, handler):
         public = request.path in {'/health', '/api/health', '/api/auth/status', '/api/auth/login', '/api/auth/oidc/login', '/api/auth/oidc/callback'} or request.path.startswith('/static/') or request.path in {'/', '/login'}
+        public |= request.method == 'GET' and request.path in {'/api/branding', '/api/v1/branding'}
         role = 'admin' if not self.state['enabled'] else None
         session = self.session(request)
         authorization = request.headers.get('Authorization')
@@ -73,7 +74,7 @@ class Access:
         if not public:
             if role is None:
                 raise web.HTTPUnauthorized(text='Sign in required')
-            admin_operation = request.path in {'/api/settings', '/api/auth/config', '/api/auth/keys', '/api/auth/oidc/config'}
+            admin_operation = request.path in {'/api/settings', '/api/auth/config', '/api/auth/keys', '/api/auth/oidc/config', '/api/branding', '/api/v1/branding', '/api/branding/reset', '/api/v1/branding/reset'}
             admin_operation |= request.method == 'DELETE' or request.path.startswith('/api/auth/keys/')
             if admin_operation and role != 'admin':
                 raise web.HTTPForbidden(text='Administrator permission required')
