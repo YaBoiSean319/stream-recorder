@@ -22,3 +22,4 @@ button:disabled{opacity:1;color:var(--muted);background:var(--control);border:1p
 .pill.error,.pill.reconnecting{border-color:var(--error-line)}
 .pill.recording{border-color:var(--accent)}
 .usage-track{background:var(--track)}
+input[type=checkbox]{width:auto;accent-color:var(--accent);margin-right:8px}

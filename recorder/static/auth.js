@@ -8,7 +8,13 @@ function recorderFetch(input,options={}) {
  return originalFetch(input,{...options,headers});
 }
  function node(tag,text){const el=document.createElement(tag);if(text)el.textContent=text;return el;}
- function field(form,id,label,type='text'){const l=node('label',label);l.htmlFor=id;const input=node('input');input.id=id;input.type=type;form.append(l,input);return input;}
+ function field(form,id,label,type='text'){
+  const l=node('label',label);l.htmlFor=id;
+  const input=node('input');input.id=id;input.type=type;
+  if(type==='checkbox'){l.prepend(input);form.append(l);}
+  else form.append(l,input);
+  return input;
+ }
  function button(form,text){const el=node('button',text);el.type='submit';form.append(el);return el;}
  async function request(path,body,method='POST'){const r=await recorderFetch(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());return r.json();}
  function report(error){document.getElementById('notice').hidden=false;document.getElementById('notice').textContent=error.message;}
