@@ -45,9 +45,13 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
                 raise web.HTTPUnauthorized()
             if self.offline:
                 raise web.HTTPServiceUnavailable()
-            path = self.media / request.match_info['name']
+            resource = request.query.get('resource') if getattr(self, 'extensionless_source', False) and request.path == '/signed' else request.match_info['name']
+            path = self.media / resource
             if not path.is_file():
                 raise web.HTTPNotFound()
+            if getattr(self, 'extensionless_source', False) and path.suffix == '.m3u8':
+                playlist = re.sub(r'(?m)^([^#\n]+\.ts)$', r'/signed?resource=\1&signature=fixture', path.read_text())
+                return web.Response(text=playlist, content_type='application/vnd.apple.mpegurl')
             return web.FileResponse(path, headers={'Access-Control-Allow-Origin': '*'})
         app = web.Application()
         app.router.add_get('/{name}', serve)
@@ -240,6 +244,31 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         await self.playable(recording)
         _, recordings = await self.request('GET', '/api/recordings')
         self.assertEqual([r['id'] for r in recordings], [recording['id']])
+
+    async def test_extensionless_signed_source_produces_playable_capture(self):
+        self.extensionless_source = True
+        await self.request('PUT', '/api/settings', {
+            'source_url': f'http://127.0.0.1:{self.fixture_port}/signed?resource=stream.m3u8&signature=fixture'})
+        await self.playable(await self.capture())
+        self.assertTrue(any(path.startswith('/signed?resource=stream') and '.ts' in path for path in self.source_requests))
+
+    async def test_encrypted_hls_produces_playable_capture(self):
+        key = self.media / 'key.bin'
+        key.write_bytes(bytes(range(16)))
+        key_info = self.root / 'key-info'
+        key_info.write_text(f'key.bin\n{key}\n')
+        result = await asyncio.to_thread(subprocess.run, [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=15',
+            '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+            '-t', '6', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '15',
+            '-c:a', 'aac', '-f', 'hls', '-hls_time', '1', '-hls_list_size', '0',
+            '-hls_key_info_file', str(key_info), str(self.media / 'encrypted.m3u8')],
+            capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        await self.request('PUT', '/api/settings', {'source_url': f'http://127.0.0.1:{self.fixture_port}/encrypted.m3u8'})
+        await self.playable(await self.capture())
+        self.assertIn('/key.bin', self.source_requests)
 
     async def test_protected_preview_and_playable_capture(self):
         for credentials, required in [

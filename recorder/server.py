@@ -42,6 +42,7 @@ class Recorder:
         self.closing = False
         self.conversion_log = None
         self.relay = SourceRelay()
+        self.capture_input_options = None
 
     def save(self, r):
         self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
@@ -116,6 +117,33 @@ class Recorder:
                 p.kill()
                 await p.wait()
 
+    async def hls_input_options(self):
+        if self.capture_input_options is None:
+            probe = await asyncio.create_subprocess_exec(
+                'ffmpeg', '-hide_banner', '-h', 'demuxer=hls',
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True, preexec_fn=parent_death_signal)
+            try:
+                help_text, _ = await asyncio.wait_for(probe.communicate(), 10)
+            finally:
+                if probe.returncode is None:
+                    probe.kill()
+                    await probe.wait()
+            if probe.returncode:
+                raise RuntimeError('FFmpeg HLS support unavailable')
+            # FFmpeg sees only our private HTTP relay. The relay validates every
+            # playlist URI, binds it to its source, and keeps credentials private.
+            # Opaque references (including signed extensionless upstream URLs)
+            # cannot satisfy the newer filename policy. Restrict real demuxers
+            # and transports instead; never allow file/concat or other protocols.
+            options = ['-f', 'hls', '-protocol_whitelist', 'http,tcp,crypto',
+                       '-format_whitelist', 'hls,mpegts,mov,aac,mp3,webvtt',
+                       '-allowed_extensions', 'ALL']
+            if b'extension_picky' in help_text:
+                options += ['-extension_picky', '0']
+            self.capture_input_options = options
+        return self.capture_input_options
+
     async def run(self, r):
         folder = self.media / r['id']
         folder.mkdir(exist_ok=True)
@@ -130,7 +158,7 @@ class Recorder:
                 index = max([int(p.stem.split('-')[-1]) for p in folder.glob('capture-*.ts')] + [-1]) + 1
                 log = open(folder / 'capture.log', 'ab')
                 capture_url = await self.relay.capture_url(r.get('source_config', {'source_url': r.get('source_url', '')}))
-                self.proc = await asyncio.create_subprocess_exec('ffmpeg', '-hide_banner', '-loglevel', 'warning', '-nostdin', '-rw_timeout', '10000000', '-allowed_extensions', 'ALL', '-i', capture_url, '-map', '0:v?', '-map', '0:a?', '-c', 'copy', '-f', 'segment', '-segment_time', '2', '-segment_format', 'mpegts', '-reset_timestamps', '1', '-segment_start_number', str(index), str(folder / 'capture-%06d.ts'), stdout=asyncio.subprocess.DEVNULL, stderr=log, start_new_session=True, preexec_fn=parent_death_signal)
+                self.proc = await asyncio.create_subprocess_exec('ffmpeg', '-hide_banner', '-loglevel', 'warning', '-nostdin', '-rw_timeout', '10000000', *(await self.hls_input_options()), '-i', capture_url, '-map', '0:v?', '-map', '0:a?', '-c', 'copy', '-f', 'segment', '-segment_time', '2', '-segment_format', 'mpegts', '-reset_timestamps', '1', '-segment_start_number', str(index), str(folder / 'capture-%06d.ts'), stdout=asyncio.subprocess.DEVNULL, stderr=log, start_new_session=True, preexec_fn=parent_death_signal)
                 r['state'] = 'recording'
                 self.save(r)
                 last_bytes = -1

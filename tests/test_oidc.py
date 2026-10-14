@@ -6,9 +6,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from joserfc import jwt
 from joserfc.jwk import RSAKey
-try:
+if __package__:
     from . import test_auth
-except ImportError:
+else:
     import test_auth
 
 
