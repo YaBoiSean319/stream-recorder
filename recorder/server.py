@@ -270,6 +270,8 @@ class Recorder:
 def create_app(path=None):
     service = Recorder(path or os.environ.get('DATA_DIR', '/data'))
     app = web.Application()
+    from recorder.auth import install
+    install(app, service)
     app[web.AppKey('recorder', Recorder)] = service
 
     async def api(request):
