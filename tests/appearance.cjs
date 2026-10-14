@@ -67,11 +67,12 @@ module.exports = async function appearance(browser, base) {
     try {
       const other = await otherContext.newPage();
       await other.goto(base+'/#settings');
+      await other.waitForFunction(() => document.title === 'Studio One');
       assert.equal(await other.title(), 'Studio One');
       assert.equal(await other.getByLabel('Theme').inputValue(), 'system');
     } finally { await otherContext.close(); }
     await page.getByLabel('Dark background hex').fill('#252525');
-    assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(37, 37, 37)');
+    assert.equal(await page.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--brand-dark-background').trim()), '#252525');
     await page.getByLabel('light accent RGB').fill('rgb(10, 20, 30)');
     assert.equal(await page.getByLabel('Light accent hex').inputValue(), '#0a141e');
     await page.getByLabel('dark accent color picker').fill('#778899');
