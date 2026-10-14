@@ -174,8 +174,8 @@ const { chromium } = require('playwright');
       await signIn.waitForURL('**/api/auth/oidc/login');
       await signIn.getByText('Identity provider unavailable; use local administrator sign-in').waitFor();
       await signIn.goto(base);
-      await signIn.getByLabel('Username').fill('browser-admin');
-      await signIn.getByLabel('Password').fill('browser-fixture-password');
+      await signIn.locator('#login-username').fill('browser-admin');
+      await signIn.locator('#login-password').fill('browser-fixture-password');
       await signIn.getByRole('button',{name:'Sign in',exact:true}).click();
       await signIn.locator('#admin-username').waitFor({state:'visible'});
     } finally { await anonymous.close(); }
