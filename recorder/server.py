@@ -251,7 +251,7 @@ class Recorder:
                 if not self.space(4 * 1024 ** 2):
                     await self.terminate()
                     log.close()
-                    raise RuntimeError('Storage exhausted during conversion; source footage retained')
+                    raise RuntimeError('Storage space exhausted during conversion; source footage retained')
             await self.proc.wait()
             log.close()
             if self.closing:
