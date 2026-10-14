@@ -1147,6 +1147,31 @@
                             "null"
                           ],
                           "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
                         }
                       }
                     }
@@ -1159,7 +1184,7 @@
       },
       "put": {
         "operationId": "updateBranding",
-        "summary": "Update shared name and colors",
+        "summary": "Update shared name, colors, and SSO button presentation",
         "x-permission": "branding:write",
         "requestBody": {
           "required": true,
@@ -1179,6 +1204,24 @@
                   },
                   "dark": {
                     "type": "object"
+                  },
+                  "sso_button": {
+                    "type": "object",
+                    "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                    "additionalProperties": false,
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "light": {
+                        "$ref": "#/components/schemas/SsoButtonColors"
+                      },
+                      "dark": {
+                        "$ref": "#/components/schemas/SsoButtonColors"
+                      }
+                    }
                   }
                 }
               }
@@ -1225,6 +1268,31 @@
                             "null"
                           ],
                           "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
                         }
                       }
                     }
@@ -1290,6 +1358,31 @@
                             "null"
                           ],
                           "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
                         }
                       }
                     }
@@ -1318,7 +1411,8 @@
             "enum": [
               "light_logo",
               "dark_logo",
-              "favicon"
+              "favicon",
+              "sso_icon"
             ]
           }
         }
@@ -1348,7 +1442,7 @@
         "operationId": "putBrandingAsset",
         "summary": "Upload or replace one shared image",
         "x-permission": "branding:write",
-        "description": "Raw PNG, JPEG, or WebP. Logos \u22642 MiB, \u22642048 px and \u22644 million pixels. Favicon \u2264512 KiB and \u2264512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image.",
+        "description": "Raw PNG, JPEG, or WebP. Logos \u22642 MiB, \u22642048 px and \u22644 million pixels. Favicon \u2264512 KiB and \u2264512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1412,6 +1506,31 @@
                             "null"
                           ],
                           "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
                         }
                       }
                     }
@@ -1478,6 +1597,31 @@
                             "null"
                           ],
                           "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
                         }
                       }
                     }
@@ -1534,6 +1678,158 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/config": {
+      "get": {
+        "summary": "Read masked YouTube configuration",
+        "description": "Requires youtube:manage (Administrator).",
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      },
+      "put": {
+        "summary": "Save shared Google OAuth client settings",
+        "description": "Requires youtube:manage. Blank or omitted client_secret retains the saved secret. Changing credentials/origin disconnects the previous channel.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "public_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "remove_client_secret": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          },
+          "401": {
+            "description": "Sign-in or browser flow required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/status": {
+      "get": {
+        "summary": "Inspect connected YouTube channel",
+        "description": "Requires youtube:manage. Includes channel ID/name and reconnect_required; never tokens.",
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/connect": {
+      "post": {
+        "summary": "Begin interactive Google authorization",
+        "description": "Requires Administrator browser session (and CSRF token when authentication enabled). Returns authorization_url for interactive consent; PKCE and browser-bound state expire in five minutes.",
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          },
+          "401": {
+            "description": "Sign-in or browser flow required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/callback": {
+      "get": {
+        "summary": "Complete Google authorization in the initiating browser",
+        "description": "Requires one-use state, the original browser binding, and Administrator session when built-in authentication is enabled.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Return to Settings on success"
+          },
+          "401": {
+            "description": "Missing, expired, or mismatched state/browser"
+          },
+          "502": {
+            "description": "Google authorization or channel lookup failed"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/refresh": {
+      "post": {
+        "summary": "Refresh offline YouTube authorization",
+        "description": "Requires youtube:manage; a revoked grant returns 409 and flags reconnect_required.",
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
+          },
+          "409": {
+            "description": "Reconnect required"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/connection": {
+      "delete": {
+        "summary": "Disconnect the shared YouTube channel",
+        "description": "Requires youtube:manage. Removes locally stored tokens; does not revoke prior Google consent remotely.",
+        "responses": {
+          "200": {
+            "description": "Masked connection information; never contains client secret or OAuth tokens"
           }
         }
       }
@@ -1861,6 +2157,20 @@
           "expires_at": {
             "type": "number",
             "description": "Future Unix timestamp in seconds; omit for a key without expiry."
+          }
+        }
+      },
+      "SsoButtonColors": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "type": "string",
+            "description": "Hex or CSS rgb() color"
+          },
+          "text": {
+            "type": "string",
+            "description": "Hex or CSS rgb() color"
           }
         }
       }

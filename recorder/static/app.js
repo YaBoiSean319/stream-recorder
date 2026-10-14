@@ -61,7 +61,7 @@ let savedBranding, draftBranding;
 const brandingControls = new Map();
 const assetDraft = new Map();
 const assetControls = new Map();
-const assetNames = {light_logo:'Light logo', dark_logo:'Dark logo', favicon:'Favicon'};
+const assetNames = {light_logo:'Light logo', dark_logo:'Dark logo', favicon:'Favicon', sso_icon:'SSO button icon'};
 function paintBrandingAssets() {
  const theme = document.documentElement.dataset.theme || 'dark';
  const logoSlot=`${theme}_logo`, logoUrl = assetDraft.has(logoSlot) ? assetDraft.get(logoSlot).url : draftBranding?.assets?.[logoSlot];
@@ -69,6 +69,8 @@ function paintBrandingAssets() {
  document.querySelectorAll('.brand-mark').forEach(mark => mark.hidden=!!logoUrl);
  const url = assetDraft.has('favicon') ? assetDraft.get('favicon').url : draftBranding?.assets?.favicon;
  $('brand-favicon').href=url || 'data:,';
+ const icon=assetDraft.has('sso_icon') ? assetDraft.get('sso_icon').url : draftBranding?.assets?.sso_icon;
+ document.querySelectorAll('.sso-icon').forEach(image=>{image.hidden=!icon;if(icon)image.src=icon;else image.removeAttribute('src');});
  for(const [slot,control] of assetControls) {
   const pending=assetDraft.get(slot), current=assetDraft.has(slot)?pending.url:draftBranding?.assets?.[slot];
   control.preview.hidden=!current;
@@ -113,47 +115,57 @@ function normalizeColor(value) {
 function rgb(hex) {return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));}
 function luminance(hex) {const v=rgb(hex).map(n=>{const c=n/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});return .2126*v[0]+.7152*v[1]+.0722*v[2];}
 function contrast(a,b) {const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+function paintSSOButton() {
+ const label=draftBranding?.sso_button?.label || 'Sign in with SSO';
+ document.querySelectorAll('.sso-label').forEach(el=>el.textContent=label);
+}
+window.paintSSOButton=paintSSOButton;
 function paintBranding(branding) {
  document.title=branding.name;
  document.querySelectorAll('[data-app-name]').forEach(el=>el.textContent=branding.name);
  document.querySelectorAll('.login-brand-name').forEach(el=>el.textContent=branding.name);
  paintBrandingAssets();
+ paintSSOButton();
  for(const theme of ['light','dark']) {
   for(const field of brandingFields)document.documentElement.style.setProperty(`--brand-${theme}-${field}`,branding[theme][field]);
   const accent=branding[theme].accent;
   document.documentElement.style.setProperty(`--brand-${theme}-on-accent`,contrast(accent,'#111111')>=contrast(accent,'#ffffff')?'#111111':'#ffffff');
+  for(const field of ['background','text'])document.documentElement.style.setProperty(`--sso-${theme}-${field}`,branding.sso_button[theme][field]);
  }
  const warnings=[];
  for(const theme of ['light','dark']) {
   for(const [foreground,background] of [['text','background'],['text','surface'],['accent','background']])
    if(contrast(branding[theme][foreground],branding[theme][background])<4.5)warnings.push(`${theme} ${foreground} on ${background} has low contrast`);
  }
+ for(const theme of ['light','dark'])if(contrast(branding.sso_button[theme].text,branding.sso_button[theme].background)<4.5)warnings.push(`${theme} SSO button text on background has low contrast`);
  $('contrast-warnings').textContent=warnings.length?'Contrast warning: '+warnings.join('; ')+'.':'Text and accent contrast meet 4.5:1 on both themes.';
 }
 function showBranding(branding) {
  resetAssetDraft();
  draftBranding=structuredClone(branding);
  $('branding-name').value=branding.name;
+ $('sso-button-label').value=branding.sso_button.label;
  for(const [key,control] of brandingControls) {
-  const [theme,field]=key.split('-'),value=branding[theme][field];
+  const parts=key.split('-'),sso=parts.length===3,theme=parts[sso?1:0],field=parts[sso?2:1];
+  const value=sso?branding.sso_button[theme][field]:branding[theme][field];
   control.hex.value=value;control.picker.value=value;control.rgb.value=`rgb(${rgb(value).join(', ')})`;
  }
  paintBranding(draftBranding);
 }
-function brandingControl(theme,field) {
+function brandingControl(theme,field,sso=false) {
  const group=element('div',undefined,'brand-color');
- const label=element('strong',`${theme[0].toUpperCase()+theme.slice(1)} ${field}`);
+ const label=element('strong',`${sso?'SSO ':''}${theme[0].toUpperCase()+theme.slice(1)} ${field}`);
  const hex=element('input'),picker=element('input'),rgbInput=element('input');
- hex.id=`brand-${theme}-${field}-hex`;hex.setAttribute('aria-label',`${theme[0].toUpperCase()+theme.slice(1)} ${field} hex`);
- picker.id=`brand-${theme}-${field}-picker`;picker.type='color';picker.setAttribute('aria-label',`${theme} ${field} color picker`);
- rgbInput.id=`brand-${theme}-${field}-rgb`;rgbInput.setAttribute('aria-label',`${theme} ${field} RGB`);
+ hex.id=`brand-${sso?'sso-':''}${theme}-${field}-hex`;hex.setAttribute('aria-label',`${sso?'SSO ':''}${theme[0].toUpperCase()+theme.slice(1)} ${field} hex`);
+ picker.id=`brand-${sso?'sso-':''}${theme}-${field}-picker`;picker.type='color';picker.setAttribute('aria-label',`${sso?'SSO ':''}${theme} ${field} color picker`);
+ rgbInput.id=`brand-${sso?'sso-':''}${theme}-${field}-rgb`;rgbInput.setAttribute('aria-label',`${sso?'SSO ':''}${theme} ${field} RGB`);
  hex.placeholder='#RRGGBB';rgbInput.placeholder='rgb(0, 0, 0)';
- const controls={hex,picker,rgb:rgbInput};brandingControls.set(`${theme}-${field}`,controls);
+ const controls={hex,picker,rgb:rgbInput};brandingControls.set(`${sso?'sso-':''}${theme}-${field}`,controls);
  for(const [format,input] of Object.entries(controls))input.addEventListener('input',()=>{
   const normalized=normalizeColor(input.value);
   input.setCustomValidity(normalized?'':'Enter #RGB, #RRGGBB, or rgb(0–255, 0–255, 0–255)');
   if(!normalized)return;
-  draftBranding[theme][field]=normalized;
+  (sso?draftBranding.sso_button[theme]:draftBranding[theme])[field]=normalized;
   for(const [other,el] of Object.entries(controls))if(other!==format){el.value=other==='rgb'?`rgb(${rgb(normalized).join(', ')})`:normalized;el.setCustomValidity('');}
   paintBranding(draftBranding);
  });
@@ -161,11 +173,23 @@ function brandingControl(theme,field) {
  return group;
 }
 for(const theme of ['light','dark'])for(const field of brandingFields)$('branding-colors').append(brandingControl(theme,field));
+const ssoOptions=element('div');ssoOptions.className='sso-options';
+const ssoHeading=element('h3','SSO sign-in button'),ssoHelp=element('p','The SSO icon and label appear on the sign-in screen when SSO is enabled. Local administrator sign-in stays available.','muted');
+const ssoLabel=element('label','Button text');ssoLabel.htmlFor='sso-button-label';
+const ssoInput=element('input');ssoInput.id='sso-button-label';ssoInput.maxLength=100;ssoInput.required=true;
+const ssoColors=element('div');ssoColors.className='branding-colors';
+for(const theme of ['light','dark'])for(const field of ['background','text'])ssoColors.append(brandingControl(theme,field,true));
+const ssoPreview=element('button');ssoPreview.type='button';ssoPreview.className='sso-button';ssoPreview.setAttribute('aria-label','SSO button preview');
+const previewIcon=element('img');previewIcon.className='sso-icon';previewIcon.alt='';previewIcon.hidden=true;
+const previewLabel=element('span','Sign in with SSO');previewLabel.className='sso-label';ssoPreview.append(previewIcon,previewLabel);
+ssoOptions.append(ssoHeading,ssoHelp,ssoLabel,ssoInput,ssoColors,ssoPreview);
+$('branding-form').insertBefore(ssoOptions,$('branding-assets'));
+ssoInput.addEventListener('input',()=>{if(!draftBranding)return;draftBranding.sso_button.label=ssoInput.value;paintBranding(draftBranding);});
 $('branding-name').addEventListener('input',()=>{if(!draftBranding)return;draftBranding.name=$('branding-name').value;paintBranding(draftBranding);});
 $('branding-form').addEventListener('submit',async event=>{
  event.preventDefault();
  try {
-  await api('/api/v1/branding',{method:'PUT',body:JSON.stringify({name:draftBranding.name,light:draftBranding.light,dark:draftBranding.dark})});
+  await api('/api/v1/branding',{method:'PUT',body:JSON.stringify({name:draftBranding.name,light:draftBranding.light,dark:draftBranding.dark,sso_button:draftBranding.sso_button})});
   for(const [slot,pending] of assetDraft) {
    const path=`/api/v1/branding/assets/${slot}`;
    const response=await recorderFetch(path,pending.file?{method:'PUT',headers:{'Content-Type':pending.file.type},body:pending.file}:{method:'DELETE'});

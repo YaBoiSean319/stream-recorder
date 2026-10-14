@@ -10,13 +10,16 @@ from aiohttp import web
 
 DEFAULT = {
     'name': 'Stream Recorder',
+    'sso_button': {'label': 'Sign in with SSO',
+                   'dark': {'background': '#c5c5c5', 'text': '#111111'},
+                   'light': {'background': '#444444', 'text': '#ffffff'}},
     'dark': {'accent': '#c5c5c5', 'background': '#141414',
              'surface': '#242424', 'text': '#f5f5f5'},
     'light': {'accent': '#444444', 'background': '#f5f5f5',
               'surface': '#ffffff', 'text': '#171717'},
 }
 COLORS = {'accent', 'background', 'surface', 'text'}
-ASSETS = {'light_logo', 'dark_logo', 'favicon'}
+ASSETS = {'light_logo', 'dark_logo', 'favicon', 'sso_icon'}
 MIME = {'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WEBP'}
 HEX = re.compile(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z')
 RGB = re.compile(r'rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)\Z', re.I)
@@ -37,10 +40,22 @@ def color(value):
 def public(settings):
     saved = settings.get('branding')
     result = {'name': DEFAULT['name'], 'dark': DEFAULT['dark'].copy(), 'light': DEFAULT['light'].copy(),
+              'sso_button': {'label': DEFAULT['sso_button']['label'],
+                             'dark': DEFAULT['sso_button']['dark'].copy(),
+                             'light': DEFAULT['sso_button']['light'].copy()},
               'assets': {slot: None for slot in ASSETS}}
     if isinstance(saved, dict):
         if isinstance(saved.get('name'), str):
             result['name'] = saved['name']
+        if isinstance(saved.get('sso_button'), dict):
+            button = saved['sso_button']
+            if isinstance(button.get('label'), str):
+                result['sso_button']['label'] = button['label']
+            for theme in ('dark', 'light'):
+                if isinstance(button.get(theme), dict):
+                    for field in ('background', 'text'):
+                        if field in button[theme]:
+                            result['sso_button'][theme][field] = button[theme][field]
         for theme in ('dark', 'light'):
             if isinstance(saved.get(theme), dict):
                 for key in COLORS:
@@ -55,16 +70,29 @@ def public(settings):
 
 
 def update(current, changes):
-    if not isinstance(changes, dict) or changes.keys() - {'name', 'dark', 'light'}:
+    if not isinstance(changes, dict) or changes.keys() - {'name', 'dark', 'light', 'sso_button'}:
         raise ValueError('Unknown branding field')
     result = public({'branding': current})
     # Asset URLs are read-only; asset mutations use the binary asset endpoints.
     result['assets'] = current.get('assets', result['assets']).copy()
-    if 'name' in changes:
-        name = changes['name']
+    def valid_label(name):
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100 or any(ord(c) < 32 or c in '<>' for c in name):
             raise ValueError('Name must be 1–100 plain-text characters')
-        result['name'] = name.strip()
+        return name.strip()
+    if 'name' in changes:
+        result['name'] = valid_label(changes['name'])
+    if 'sso_button' in changes:
+        button = changes['sso_button']
+        if not isinstance(button, dict) or button.keys() - {'label', 'dark', 'light'}:
+            raise ValueError('Unknown SSO button field')
+        if 'label' in button:
+            result['sso_button']['label'] = valid_label(button['label'])
+        for theme in ('dark', 'light'):
+            if theme in button:
+                values = button[theme]
+                if not isinstance(values, dict) or values.keys() - {'background', 'text'}:
+                    raise ValueError('Unknown SSO button color field')
+                result['sso_button'][theme].update({field: color(value) for field, value in values.items()})
     for theme in ('dark', 'light'):
         if theme in changes:
             values = changes[theme]

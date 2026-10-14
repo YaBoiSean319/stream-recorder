@@ -170,7 +170,7 @@ class Access:
                 raise web.HTTPForbidden(text='Administrator permission required')
         try:
             response = await handler(request)
-            if '/auth/' in request.path:
+            if '/auth/' in request.path or '/youtube/' in request.path:
                 response.headers['Cache-Control'] = 'no-store'
             return response
         except (json.JSONDecodeError, ValueError, TypeError, AttributeError):

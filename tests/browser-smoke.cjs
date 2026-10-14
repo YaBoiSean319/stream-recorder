@@ -54,6 +54,7 @@ const { chromium } = require('playwright');
     await page.close();
     await new Promise(resolve => setTimeout(resolve,3500));
     const reopened = await browser.newPage();
+    await reopened.emulateMedia({colorScheme:'dark'});
     await reopened.goto(base);
     await reopened.locator('#stop').waitFor({state:'visible'});
     response = await reopened.request.get(base+'/api/status');
@@ -145,6 +146,39 @@ const { chromium } = require('playwright');
     await reopened.waitForFunction(()=>document.querySelector('#oidc-remove_client_secret')?.disabled);
     const oidcConfig = await (await reopened.request.get(base+'/api/auth/oidc/config')).json();
     assert.equal(oidcConfig.client_secret_saved,false,'Saved OIDC secret must be removable through Settings');
+    // SSO presentation works in an anonymous browser before a provider is contacted.
+    await reopened.getByLabel('Button text').fill('Continue with Entra');
+    await reopened.getByLabel('SSO Light background hex').fill('#123456');
+    await reopened.getByLabel('SSO Dark text hex').fill('#111111');
+    await reopened.getByLabel('SSO button icon').setInputFiles({name:'sso.png',mimeType:'image/png',buffer:icon});
+    await reopened.getByRole('button',{name:'Save branding'}).click();
+    await reopened.getByText('Branding saved.').waitFor();
+    const token=(await (await reopened.request.get(base+'/api/auth/status')).json()).csrf_token;
+    const configured=await reopened.request.post(base+'/api/auth/oidc/config',{headers:{'X-CSRF-Token':token},data:{issuer:'http://127.0.0.1:1',client_id:'browser-fixture',public_url:base,group_claim:'groups',operator_groups:['operators'],admin_groups:['admins'],enabled:true}});
+    assert.equal(configured.status(),200);
+    const anonymous=await browser.newContext();
+    try {
+      const signIn=await anonymous.newPage();
+      await signIn.emulateMedia({colorScheme:'dark'});
+      await signIn.goto(base);
+      const sso=signIn.getByRole('button',{name:'Continue with Entra'});
+      await sso.waitFor();
+      assert.match(await sso.locator('img').getAttribute('src'),/assets\/sso_icon\?v=/);
+      assert.equal(await sso.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(197, 197, 197)');
+      await signIn.setViewportSize({width:390,height:844});
+      assert.equal(await signIn.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      await signIn.emulateMedia({colorScheme:'light'});
+      await signIn.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+      assert.equal(await sso.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(18, 52, 86)');
+      await sso.focus();await signIn.keyboard.press('Enter');
+      await signIn.waitForURL('**/api/auth/oidc/login');
+      await signIn.getByText('Identity provider unavailable; use local administrator sign-in').waitFor();
+      await signIn.goto(base);
+      await signIn.getByLabel('Username').fill('browser-admin');
+      await signIn.getByLabel('Password').fill('browser-fixture-password');
+      await signIn.getByRole('button',{name:'Sign in',exact:true}).click();
+      await signIn.locator('#admin-username').waitFor({state:'visible'});
+    } finally { await anonymous.close(); }
     await snapshot(reopened,'mobile-authenticated-settings');
     console.log('Browser preview, capture independence, stop, download, pin and deletion confirmation passed');
   } catch (error) {

@@ -58,3 +58,7 @@ video{background:#090909}
 .record-actions{flex-wrap:wrap;justify-content:flex-end}.record-row{align-items:flex-start}#start-form>input{margin-bottom:16px}#rename-dialog{width:min(440px,calc(100vw - 30px))}
 
 .brand-image{max-width:170px;max-height:54px;object-fit:contain}.login-brand-image{max-width:240px;max-height:96px;object-fit:contain}.brand-asset{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;margin:16px 0;border-top:1px solid var(--line);padding-top:16px}.brand-asset label{grid-column:1/-1}.brand-asset input{grid-column:1/-1}.brand-asset img{max-width:180px;max-height:72px;object-fit:contain}.brand-asset button{justify-self:end}.brand-asset .muted{grid-column:1/-1}
+
+/* Shared SSO presentation is available before login, with independent colors. */
+.sso-options{border-top:1px solid var(--line);margin-top:22px;padding-top:16px}.sso-options h3{margin:0 0 6px}.sso-button{display:inline-flex;align-items:center;justify-content:center;gap:10px;max-width:100%;min-height:44px;padding:11px 16px;background:var(--sso-dark-background,#c5c5c5);color:var(--sso-dark-text,#111);border:1px solid currentColor;overflow-wrap:anywhere;text-align:center}.sso-button:hover{filter:brightness(1.1)}.sso-button .sso-icon{width:24px;height:24px;object-fit:contain;flex:none}.settings>.sso-button{width:100%;margin-top:20px}.sso-options .sso-button{margin:4px 0 14px}
+:root[data-theme=light] .sso-button{background:var(--sso-light-background,#444);color:var(--sso-light-text,#fff)}

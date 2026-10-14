@@ -14,6 +14,8 @@ Appearance coverage in `tests/appearance.cjs` uses Settings controls and observe
 
 Asset coverage in `tests/test_branding.py` checks decoded PNG upload, replacement, public image reads, restart preservation with the same persistent data directory, invalid/active/trailing/oversized uploads retaining the prior asset, access controls, per-slot clearing, and branding-only reset. `tests/appearance.cjs` previews, saves, selects the effective light/dark logo, verifies the favicon and reload, and checks discard/reset. Browser smoke also verifies the uploaded dark logo on the sign-in screen. The same persisted directory used in the container replacement workflow carries the SQLite branding manifest and `branding-assets/` files through replacement.
 
+SSO button coverage in `tests/test_branding.py` checks the public default, validated administrator changes, persisted label and independent colors, icon upload/restart/reset, and anonymous write denial. Browser smoke configures the button, verifies the anonymous label/icon and light/dark colors on a narrow screen, activates it by keyboard to exercise a failed provider path, and then signs in through the local recovery form. `tests/test_oidc.py` exercises signed provider role assignment and failed token validation through the same OIDC endpoint.
+
 Failure coverage uses external process fixtures: a temporary FFmpeg command shim rejects conversion while real capture continues; an optional compiled `LD_PRELOAD` fixture reports zero available filesystem blocks. The latter verifies public API handling of OS capacity, without filling the host disk. It requires a C compiler and is skipped when none exists. These controlled failures do not substitute for physical disk-failure testing.
 
 ## Combined upgrade review

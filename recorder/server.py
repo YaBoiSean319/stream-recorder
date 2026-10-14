@@ -318,6 +318,8 @@ def create_app(path=None):
     app = web.Application()
     from recorder.auth import install
     access = install(app, service)
+    from recorder.youtube import install as install_youtube
+    install_youtube(app, service, access)
     app[web.AppKey('recorder', Recorder)] = service
     from recorder.branding import install as install_branding
     install_branding(app, service)

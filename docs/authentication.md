@@ -2,6 +2,8 @@
 
 Authentication is off on new installations. An external access boundary can remain in place. Administrators can create a local username and password (at least 12 characters) in Settings, then enable built-in authentication. Local sign-in remains available with SSO enabled.
 
+Shared Branding settings control the SSO sign-in button text, optional icon, and independent light/dark background and text colors. The default button reads “Sign in with SSO.” These presentation settings do not change the OIDC issuer, group authorization, or local recovery path. The icon uses validated PNG/JPEG/WebP uploads and is decorative; the button text remains its accessible name. Branding reset restores the default button and removes its icon.
+
 Operators can preview, capture, stop, download and pin/unpin. Only administrators read/change shared settings, manage access and keys, or deliberately delete recordings. APIs return 401/403 without redirecting to a login page. Downloads and preview resources require the same session or API key as JSON APIs. API keys do not override busy admission or active-media protection.
 
 Use HTTPS for production. Set the HTTPS public origin in Authentication settings when TLS terminates at a reverse proxy: this makes browser cookies Secure and establishes the allowed request Origin. The application does not trust arbitrary forwarded headers. Restrict direct backend access to your trusted deployment network. Browser sessions expire after eight hours and do not survive application restart; credentials and keys do. Browser state-changing requests require `X-CSRF-Token` from `/api/auth/status` or local login. Cookies are HttpOnly and SameSite=Lax.

@@ -61,6 +61,27 @@ class BrandingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['name'], 'Stream Recorder')
         self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['light']['text'], '#171717')
 
+    async def test_sso_button_presentation_is_public_admin_managed_and_durable(self):
+        fresh = await (await self.client.get('/api/v1/branding')).json()
+        self.assertEqual(fresh['sso_button']['label'], 'Sign in with SSO')
+        changed = await self.client.put('/api/v1/branding', json={'sso_button':{
+            'label':'Continue with Entra', 'light':{'background':'#123456','text':'#ffffff'},
+            'dark':{'background':'rgb(180, 190, 200)','text':'#111111'}}})
+        self.assertEqual(changed.status, 200)
+        self.assertEqual((await changed.json())['sso_button']['dark']['background'], '#b4bec8')
+        for bad in ['', '<img>', ' x'*101, 42]:
+            self.assertEqual((await self.client.put('/api/v1/branding', json={'sso_button':{'label':bad}})).status, 400)
+        self.assertEqual((await self.client.put('/api/v1/branding', json={'sso_button':{'light':{'background':'url(evil)'}}})).status, 400)
+        await self.client.close()
+        await self.open_app()
+        self.assertEqual((await (await self.client.get('/api/branding')).json())['sso_button']['label'], 'Continue with Entra')
+        await self.client.post('/api/auth/config', json={'username':'admin', 'password':'correct horse battery staple', 'enabled':True})
+        self.assertEqual((await self.client.put('/api/v1/branding', json={'sso_button':{'label':'Anon'}})).status, 401)
+        signed = await (await self.client.post('/api/auth/login', json={'username':'admin','password':'correct horse battery staple'})).json()
+        headers={'X-CSRF-Token':signed['csrf_token']}
+        self.assertEqual((await self.client.post('/api/v1/branding/reset', json={}, headers=headers)).status, 200)
+        self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['sso_button']['label'], 'Sign in with SSO')
+
     async def test_image_assets_are_public_durable_and_reset_independently(self):
         def png(color):
             output = io.BytesIO()
@@ -80,17 +101,19 @@ class BrandingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(changed.status, 200)
         self.assertNotEqual((await changed.json())['assets']['light_logo'], first_url)
         self.assertEqual((await (await self.client.get(path)).read()), newer)
-        for slot in ('dark_logo', 'favicon'):
+        for slot in ('dark_logo', 'favicon', 'sso_icon'):
             response = await self.client.put(f'/api/v1/branding/assets/{slot}', data=original, headers={'Content-Type': 'image/png'})
             self.assertEqual(response.status, 200)
         await self.client.close()
         await self.open_app()
         self.assertEqual((await (await self.client.get(path)).read()), newer)
         self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['assets']['dark_logo'].startswith('/api/v1/branding/assets/'), True)
+        self.assertEqual((await (await self.client.get('/api/v1/branding')).json())['assets']['sso_icon'].startswith('/api/v1/branding/assets/'), True)
         self.assertEqual((await self.client.delete(path)).status, 200)
         self.assertEqual((await self.client.get(path)).status, 404)
         self.assertEqual((await self.client.post('/api/v1/branding/reset', json={})).status, 200)
         self.assertEqual((await self.client.get('/api/v1/branding/assets/favicon')).status, 404)
+        self.assertEqual((await self.client.get('/api/v1/branding/assets/sso_icon')).status, 404)
 
     async def test_bad_uploads_preserve_prior_asset_and_admin_controls(self):
         output = io.BytesIO()
