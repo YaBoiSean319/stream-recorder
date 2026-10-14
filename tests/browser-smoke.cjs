@@ -1,14 +1,51 @@
 /* Public browser + HTTP acceptance, local source supplied by the Python harness. */
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 require('./preview-selection.cjs');
 const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch({headless:true, ...(process.env.CHROMIUM_PATH ? {executablePath:process.env.CHROMIUM_PATH} : {}), args:['--no-sandbox']});
   const page = await browser.newPage();
   const base = process.env.RECORDER_URL;
+  const screenshots = process.env.BROWSER_ARTIFACT_DIR;
+  async function snapshot(page, name) {
+    if (!screenshots) return;
+    fs.mkdirSync(screenshots, {recursive:true});
+    await page.screenshot({path:path.join(screenshots,name+'.png'),fullPage:true});
+  }
   try {
+    await require('./appearance.cjs')(browser, base);
     await page.goto(base);
     await page.locator('#connection').filter({hasText:'Connected'}).waitFor();
+    const saved = await (await page.request.get(base+'/api/settings')).json();
+    await page.request.put(base+'/api/settings', {data:{source_url:''}});
+    await page.reload();
+    await page.getByText('Configure a stream in Settings', {exact:true}).waitFor();
+    assert.equal(await page.locator('#start').isEnabled(), false);
+    await page.getByRole('link', {name:'Open Settings'}).click();
+    await page.locator('#settings-screen').waitFor({state:'visible'});
+    await snapshot(page,'desktop-settings');
+    for (const theme of ['dark','light','system']) {
+      await page.locator('#theme').selectOption(theme);
+      for (const accent of ['mint','blue','rose']) {
+        await page.locator('#accent').selectOption(accent);
+        await snapshot(page,`desktop-settings-${theme}-${accent}`);
+      }
+    }
+    await page.setViewportSize({width:390,height:844});
+    await snapshot(page,'mobile-settings');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'Mobile Settings must not overflow horizontally');
+    await page.locator('#theme').selectOption('dark');
+    await page.locator('#accent').selectOption('mint');
+    await page.setViewportSize({width:1280,height:900});
+    await page.locator('#source').fill(saved.source_url);
+    await page.locator('#cap').fill('0.2');
+    await page.locator('#settings-form button[type=submit]').click();
+    await page.waitForFunction(() => !document.querySelector('#start').disabled);
+    await page.getByRole('link', {name:'Recorder',exact:true}).click();
+    await page.locator('.workspace').waitFor({state:'visible'});
+    await snapshot(page,'desktop-recorder');
     assert.equal(await page.locator('#start').isEnabled(), true);
     await page.locator('#preview').evaluate(video => video.play());
     await page.waitForFunction(() => document.querySelector('#preview').currentTime > 0, null, {timeout:15000});
@@ -35,6 +72,58 @@ const { chromium } = require('playwright');
     await reopened.getByRole('button',{name:/^Delete /}).click();
     await reopened.locator('#delete-dialog button[value="delete"]').click();
     await reopened.locator('.empty').waitFor();
+    await reopened.getByRole('link',{name:'Settings',exact:true}).click();
+    await reopened.locator('#admin-username').fill('browser-admin');
+    await reopened.locator('#admin-password').fill('browser-fixture-password');
+    await reopened.locator('#auth-enabled').check();
+    await reopened.getByRole('button',{name:'Save authentication',exact:true}).click();
+    await reopened.locator('#login-username').waitFor();
+    await snapshot(reopened,'desktop-login');
+    await reopened.setViewportSize({width:390,height:844});
+    await snapshot(reopened,'mobile-login');
+    await reopened.locator('#login-username').fill('browser-admin');
+    await reopened.locator('#login-password').fill('browser-fixture-password');
+    await reopened.getByRole('button',{name:'Sign in',exact:true}).click();
+    await reopened.locator('#admin-username').waitFor({state:'visible'});
+    await reopened.getByRole('link',{name:'Recorder',exact:true}).click();
+    await reopened.locator('#start').waitFor({state:'visible'});
+    await reopened.locator('#preview').evaluate(video=>video.play());
+    await reopened.waitForFunction(()=>document.querySelector('#preview').currentTime>0,null,{timeout:15000});
+    await reopened.locator('#start').click();
+    await reopened.locator('#state').filter({hasText:'Recording'}).waitFor();
+    await snapshot(reopened,'mobile-authenticated-recorder');
+    await reopened.waitForTimeout(3000);
+    await reopened.locator('#stop').click();
+    await reopened.locator('a:has-text("Download")').waitFor({timeout:30000});
+    await reopened.getByRole('link',{name:'Settings',exact:true}).click();
+    await reopened.locator('#settings-screen').waitFor({state:'visible'});
+    await reopened.locator('#oidc-client_secret').fill('browser-oidc-fixture-secret');
+    const secretSaved = reopened.waitForResponse(response => response.url() === base+'/api/auth/oidc/config' && response.request().method() === 'POST');
+    await reopened.getByRole('button',{name:'Save SSO',exact:true}).click();
+    const savedResponse = await secretSaved;
+    assert.equal(savedResponse.status(),200,'Saving OIDC secret must succeed');
+    // The old disabled control remains visible until the save handler reloads.
+    await reopened.waitForFunction(()=>{
+      const control=document.querySelector('#oidc-remove_client_secret');
+      return control && !control.disabled;
+    });
+    assert.equal(await reopened.locator('#oidc-remove_client_secret').isEnabled(),true);
+    const savedOidcConfig = await (await reopened.request.get(base+'/api/auth/oidc/config')).json();
+    assert.equal(savedOidcConfig.client_secret_saved,true,'Saved OIDC secret must persist after reload');
+    await reopened.locator('#oidc-remove_client_secret').check();
+    const secretRemoved = reopened.waitForResponse(response => response.url() === base+'/api/auth/oidc/config' && response.request().method() === 'POST');
+    await reopened.getByRole('button',{name:'Save SSO',exact:true}).click();
+    const removedResponse = await secretRemoved;
+    assert.equal(removedResponse.status(),200,'Removing OIDC secret must succeed');
+    await reopened.waitForFunction(()=>document.querySelector('#oidc-remove_client_secret')?.disabled);
+    const oidcConfig = await (await reopened.request.get(base+'/api/auth/oidc/config')).json();
+    assert.equal(oidcConfig.client_secret_saved,false,'Saved OIDC secret must be removable through Settings');
+    await snapshot(reopened,'mobile-authenticated-settings');
     console.log('Browser preview, capture independence, stop, download, pin and deletion confirmation passed');
+  } catch (error) {
+    for (const context of browser.contexts()) {
+      for (const open of context.pages()) await snapshot(open,'failure').catch(()=>{});
+    }
+    throw error;
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

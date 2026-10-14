@@ -21,9 +21,20 @@ jobs:
           node-version: '22'
       - run: npm install --no-save playwright@1.62.1
       - run: npx playwright install --with-deps chromium
-      - name: HTTP, media, recovery, and browser acceptance
-        run: NODE_PATH=$(npm root) RUN_BROWSER_TESTS=1 python -m unittest discover -s tests -v
+      - name: Browser acceptance
+        run: NODE_PATH=$(npm root) RUN_BROWSER_TESTS=1 BROWSER_ARTIFACT_DIR="$PWD/browser-artifacts" python -m unittest discover -s tests -p test_acceptance.py -k test_browser_controls_and_browser_closure -v
+      - name: Browser review and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-review
+          path: browser-artifacts/
+          if-no-files-found: ignore
+      - name: HTTP, media, and recovery acceptance
+        run: python -m unittest discover -s tests -v
       - run: docker build -t stream-recorder:test .
+      - name: Focused media acceptance inside built image
+        run: docker run --rm -v "$PWD/tests:/tests:ro" stream-recorder:test python -m unittest discover -s /tests -p test_acceptance.py -k test_recording_produces_one_playable_download -v
       - name: Acceptance tests inside built image
         run: docker run --rm -v "$PWD/tests:/tests:ro" stream-recorder:test python -m unittest discover -s /tests -v
       - name: Docker Compose smoke test
