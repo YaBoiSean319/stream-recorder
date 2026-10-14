@@ -1,6 +1,6 @@
 # Branding, recording titles, YouTube uploads, and API parity
 
-Status: design interview in progress. Confirmed choices below are requirements; open questions are not defaults or implementation authorization.
+Status: design interview complete; awaiting confirmation of the complete shared understanding before implementation.
 
 ## Confirmed requirements
 
@@ -33,11 +33,15 @@ Status: design interview in progress. Confirmed choices below are requirements; 
 - Serve interactive API documentation in the application and maintain repository documentation. Introduce /api/v1 with existing routes retained as compatibility aliases. Document examples, permissions, errors, pagination, webhooks, and Power Automate/n8n workflows.
 - Initial Google OAuth consent requires a human; authorized recording/upload operations can subsequently run unattended.
 
+## Round four confirmed requirements
+
+- Automatic uploads include only successfully finalized recordings. Interrupted/recovered recordings require manual upload. Enabling automatic uploads affects future recordings only; existing recordings remain manually uploadable.
+- Cancellation stops further work without deleting an already-created YouTube video. Preserve known video links. Disconnecting pauses pending jobs. Jobs remain bound to the original channel; connecting a different channel requires explicit requeuing.
+- Interactive documentation follows application access controls. Try it uses the current user's permissions or an entered API key. Never embed credentials. Identify write/delete operations clearly and execute only on explicit submission.
+
 ## Open design questions
 
-- Eligibility of recovered/interrupted recordings for automatic upload.
-- Cancellation and disconnect behavior, including already-created remote videos and queued channel binding.
-- Access to interactive documentation and behavior of the Try it controls.
+None. Implementation details must satisfy the requirements above and existing project standards; they do not expand product scope.
 
 ## Terminology
 
