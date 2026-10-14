@@ -1,6 +1,6 @@
 # Branding, recording titles, YouTube uploads, and API parity
 
-Status: design interview complete; awaiting confirmation of the complete shared understanding before implementation.
+Status: design approved on 2026-10-14. Specification #21 and implementation tickets #22–#33 are published; implementation is not claimed complete.
 
 ## Confirmed requirements
 
