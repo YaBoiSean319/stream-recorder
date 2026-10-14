@@ -102,19 +102,19 @@ const { chromium } = require('playwright');
     await reopened.getByRole('button',{name:'Save SSO',exact:true}).click();
     const savedResponse = await secretSaved;
     assert.equal(savedResponse.status(),200,'Saving OIDC secret must succeed');
-    assert.equal((await savedResponse.json()).client_secret_saved,true);
     // The old disabled control remains visible until the save handler reloads.
     await reopened.waitForFunction(()=>{
       const control=document.querySelector('#oidc-remove_client_secret');
       return control && !control.disabled;
     });
     assert.equal(await reopened.locator('#oidc-remove_client_secret').isEnabled(),true);
+    const savedOidcConfig = await (await reopened.request.get(base+'/api/auth/oidc/config')).json();
+    assert.equal(savedOidcConfig.client_secret_saved,true,'Saved OIDC secret must persist after reload');
     await reopened.locator('#oidc-remove_client_secret').check();
     const secretRemoved = reopened.waitForResponse(response => response.url() === base+'/api/auth/oidc/config' && response.request().method() === 'POST');
     await reopened.getByRole('button',{name:'Save SSO',exact:true}).click();
     const removedResponse = await secretRemoved;
     assert.equal(removedResponse.status(),200,'Removing OIDC secret must succeed');
-    assert.equal((await removedResponse.json()).client_secret_saved,false);
     await reopened.waitForFunction(()=>document.querySelector('#oidc-remove_client_secret')?.disabled);
     const oidcConfig = await (await reopened.request.get(base+'/api/auth/oidc/config')).json();
     assert.equal(oidcConfig.client_secret_saved,false,'Saved OIDC secret must be removable through Settings');
