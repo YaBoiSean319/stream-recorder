@@ -109,7 +109,7 @@ const { chromium } = require('playwright');
     const operationSelect = reopened.locator('#operation');
     await operationSelect.waitFor();
     await reopened.waitForFunction(() => document.querySelector('#operation').options.length > 20);
-    await operationSelect.selectOption(JSON.stringify(['put','/api/v1/youtube/automation']));
+    await operationSelect.selectOption(JSON.stringify(['PUT','/api/v1/youtube/automation']));
     await reopened.locator('#mutation-warning').filter({hasText:'only when you submit'}).waitFor();
     await reopened.locator('#body').fill('{"enabled":false}');
     let tryItWrites = 0;
