@@ -24,6 +24,14 @@ Failure coverage uses external process fixtures: a temporary FFmpeg command shim
 
 `test_upgrade_fills_missing_settings_without_replacing_legacy_source` supplies a historical two-field settings fixture, including the formerly bundled saved URL. Constructing historical input is the only database fixture setup; all preservation assertions use the public API and playable media download. The old URL is preserved as historical test input, never a new-install default or deployment example.
 
+`test_branding_auth_automatic_queue_and_webhook_survive_replacement` exercises the combined feature state across a recorder process replacement using the same isolated data directory. It captures and pins playable footage from a protected local source, saves shared branding and an image asset, OIDC mappings and API keys, automatic-upload defaults and a channel-bound paused job, a persisted recording-start idempotency key, and a pending signed webhook delivery. The test verifies that the upload remains paused and protects the local recording while the failed webhook attempt is retried after restart with the same event ID. It also verifies source and OIDC secret masking, saved channel/client configuration, and unchanged upload metadata through the public API. Its fixture writes the local YouTube connection directly into SQLite so no real Google credentials or upload endpoint are used; the queued job is paused before any provider request.
+
+For the combined branding, queue, and webhook replacement test, run:
+
+```sh
+python -m unittest tests.test_upgrade_integration -v
+```
+
 CI runs HTTP/media/browser checks before image publication, repeats server acceptance inside the built image, and replaces a container with the same named volume. `browser-review` contains screenshots from isolated fixtures for visual review, uploaded even if browser checks fail. Screenshots show test configuration only, not operator deployment data. A green local server test is not evidence that browser or container checks passed: reviewers must inspect the actual workflow results and artifacts. No merge or deployment is part of verification.
 
 For a focused restart check, run:
@@ -34,7 +42,7 @@ python -m unittest tests.test_acceptance.RecorderAcceptance.test_combined_access
 
 For browser evidence locally, set `BROWSER_ARTIFACT_DIR` to a scratch directory alongside `RUN_BROWSER_TESTS=1`; screenshots are optional and do not alter the browser assertions. Missing browser binaries are a skipped check, not a pass.
 
-Validation evidence for this slice: the combined process replacement/protected-media/local-recovery/key-revocation acceptance passed locally (one test, 5.358 seconds); JavaScript syntax validation and the appearance preference harness also passed. The browser smoke test now uses a protected local upstream, covers desktop theme/accent combinations, mobile overflow, local login, authenticated mobile preview/capture and Settings, and captures review screenshots. Chromium installation was blocked by an invalid downloaded archive; no local browser execution is claimed. Docker is unavailable locally; actual container replacement, image acceptance and screenshot evidence remain CI checks, not locally verified results.
+Validation evidence for the combined upgrade slice: full `python -m unittest discover -s tests -v` passed locally (85 tests, one browser test skipped). The combined test covers protected-source capture, playable download, automatic queue protection, idempotent admission, persisted webhook retry, branding asset, authentication, and process replacement. Existing tests cover restart probing of YouTube resumable sessions without a second initiation, branding assets, valid browser theme preferences, and media recovery. Browser execution is not claimed: Playwright Chromium is not installed in this environment. Docker is also unavailable locally; actual image build, container replacement and screenshot artifacts remain required CI checks, not locally verified results.
 
 Container capture compatibility: the public playable-download acceptance was reproduced against official FFmpeg 7.1.3 while keeping source generation and output verification on host FFmpeg 6.1.1. Before the fix, opaque relay segment URLs failed `allowed_segment_extensions` and produced no footage; after the fix the same acceptance passed on both versions. FFmpeg reads only the private provenance-bound relay, with HTTP/TCP/crypto protocols and HLS/TS/MP4/AAC/MP3/WebVTT demuxers allowed. Newer filename matching is disabled only when the installed HLS demuxer advertises it. Docker image acceptance remains a separate required CI check.
 

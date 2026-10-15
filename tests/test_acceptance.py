@@ -30,6 +30,8 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.media.mkdir()
         self.offline = False
         self.source_requests = []
+        self.webhook_fail = False
+        self.webhook_requests = []
         self.fixture_log = (self.root / 'fixture.log').open('wb')
         self.fixture = subprocess.Popen([
             'ffmpeg', '-hide_banner', '-loglevel', 'error', '-re',
@@ -54,6 +56,10 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
                 return web.Response(text=playlist, content_type='application/vnd.apple.mpegurl')
             return web.FileResponse(path, headers={'Access-Control-Allow-Origin': '*'})
         app = web.Application()
+        async def webhook(request):
+            self.webhook_requests.append((dict(request.headers), await request.read()))
+            return web.Response(status=503 if self.webhook_fail else 204)
+        app.router.add_post('/webhook', webhook)
         app.router.add_get('/{name}', serve)
         self.fixture_runner = web.AppRunner(app)
         await self.fixture_runner.setup()
