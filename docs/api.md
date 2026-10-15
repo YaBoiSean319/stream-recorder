@@ -36,3 +36,7 @@ For Power Automate, use an HTTP action with `POST`, URI `https://recorder.exampl
 For n8n, use an HTTP Request node with Bearer credential, POST `/api/v1/recordings`, JSON body `{ "duration_seconds": 3600 }`, and `Idempotency-Key` expression derived from the source event identifier. A second HTTP Request node can poll `/api/v1/recordings/{{$json.id}}` and follow the `state`. Keep tokens in credentials, never literal workflow exports.
 
 Stable errors use HTTP 400 `invalid_request`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict` or `idempotency_conflict`, 429 `rate_limited`, and 507 `insufficient_storage`. The human readable `message` can change; branch on status and `code`.
+
+## Webhooks
+
+Administrator scoped keys use `webhooks:manage` for `GET/POST /api/v1/webhooks`, `GET/PUT/DELETE /api/v1/webhooks/{destination_id}`, and `GET /api/v1/webhooks/deliveries`. See [verification and automation](webhooks.md) for signature, payload, retry, and receiver details. Saved signing secrets are never returned.

@@ -153,6 +153,8 @@ class Access:
                     needed.add('recordings:pin')
                 if 'title' in patch:
                     needed.add('recordings:title')
+                if 'auto_upload' in patch or 'upload_metadata' in patch:
+                    needed.add('recordings:start')
             if not needed.issubset(set(key['permissions'])):
                 raise web.HTTPForbidden(text='API key lacks permission for this operation')
             key['last_used_at'] = time.time()

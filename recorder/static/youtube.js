@@ -32,6 +32,29 @@
   try {const result = await api('/api/v1/youtube/connect',{method:'POST',body:'{}'});window.location.assign(result.authorization_url);}
   catch(e) {error.textContent = e.message;}
  };
+ function showAutomatic(data) {
+  byId('auto-enabled').checked = data.enabled;
+  byId('auto-source-name').value = data.source_name;
+  byId('auto-title').value = data.title_template;
+  byId('auto-description').value = data.description_template;
+  byId('auto-privacy').value = data.privacy_status;
+  byId('auto-tags').value = data.tags.join(', ');
+  byId('auto-category').value = data.category_id;
+  byId('auto-audience').value = data.made_for_kids === null ? '' : String(data.made_for_kids);
+  byId('auto-notify').checked = data.notify_subscribers;
+ }
+ try {showAutomatic(await api('/api/v1/youtube/automation'));} catch(e) {error.textContent = e.message;}
+ byId('youtube-automation-form').onsubmit = async event => {
+  event.preventDefault();
+  const audience = byId('auto-audience').value;
+  const body = {enabled:byId('auto-enabled').checked, source_name:byId('auto-source-name').value.trim(),
+   title_template:byId('auto-title').value, description_template:byId('auto-description').value,
+   privacy_status:byId('auto-privacy').value, tags:byId('auto-tags').value.split(',').map(x=>x.trim()).filter(Boolean),
+   category_id:byId('auto-category').value.trim(), made_for_kids:audience===''?null:audience==='true',
+   notify_subscribers:byId('auto-notify').checked};
+  try {showAutomatic(await api('/api/v1/youtube/automation',{method:'PUT',body:JSON.stringify(body)}));error.textContent='Automatic upload settings saved.';}
+  catch(e) {error.textContent=e.message;}
+ };
  byId('youtube-disconnect').onclick = async () => {
   if(!window.confirm('Disconnect the shared YouTube channel? Pending uploads will pause.')) return;
   try {show(await api('/api/v1/youtube/connection',{method:'DELETE'}));}

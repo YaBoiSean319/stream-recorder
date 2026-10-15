@@ -38,6 +38,7 @@ class Recorder:
         self.db.execute('INSERT OR REPLACE INTO settings VALUES(1,?)', (json.dumps(self.settings),))
         self.db.commit()
         self.records = {i: json.loads(p) for i, p in self.db.execute('SELECT id,payload FROM records')}
+        self._record_states = {i: r['state'] for i, r in self.records.items()}
         self.gate = asyncio.Lock()
         self.task = None
         self.proc = None
@@ -47,8 +48,12 @@ class Recorder:
         self.capture_input_options = None
 
     def save(self, r):
+        previous = getattr(self, '_record_states', {}).get(r['id'])
         self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
         self.db.commit()
+        self._record_states[r['id']] = r['state']
+        if hasattr(self, 'webhooks'):
+            self.webhooks.recording_changed(r, previous)
 
     def admit(self, r, caller, key, fingerprint):
         # Save admission and retry mapping together. A process crash can never
@@ -73,6 +78,7 @@ class Recorder:
             raise ValueError('Upload protects this recording')
         shutil.rmtree(self.media / r['id'], ignore_errors=True)
         self.records.pop(r['id'])
+        self._record_states.pop(r['id'], None)
         self.db.execute('DELETE FROM records WHERE id=?', (r['id'],))
         self.db.commit()
 
@@ -312,6 +318,8 @@ class Recorder:
         r['state'] = 'ready'
         r['progress'] = 100
         self.save(r)
+        if r.get('automatic_upload') and not r.get('interruptions'):
+            self.uploads.enqueue_automatic(r)
         for p in pieces:
             p.unlink()
 
@@ -324,6 +332,10 @@ def create_app(path=None):
     install_youtube(app, service, access)
     from recorder.uploads import install as install_uploads
     install_uploads(app, service, app['youtube_connection'])
+    from recorder.webhooks import install as install_webhooks
+    install_webhooks(app, service)
+    from recorder.automatic_upload import install as install_automatic_upload
+    install_automatic_upload(app, service, app['youtube_connection'])
     app[web.AppKey('recorder', Recorder)] = service
     from recorder.branding import install as install_branding
     install_branding(app, service)
@@ -446,6 +458,10 @@ def create_app(path=None):
                     r = {'id': ident, 'state': 'recording', 'started_at': now.isoformat(), 'deadline': (now + dt.timedelta(seconds=duration)).isoformat() if duration else None, 'filename': now.strftime('%Y-%m-%d_%H-%M-%S_UTC') + '_' + ident[:8] + '.mp4', 'source_url': service.settings['source_url'], 'pinned': False, 'progress': 0, 'error': None, 'interruptions': [], 'stop_requested': False}
                     if title is not None:
                         r['title'] = title
+                    try:
+                        service.auto_upload.prepare(r, body.get('upload_metadata'), body.get('auto_upload'))
+                    except ValueError as error:
+                        raise web.HTTPBadRequest(text=str(error)) from None
                     service.records[ident] = r
                     r['source_config'] = source_config(service.settings)
                     r.pop('source_url', None)
@@ -471,7 +487,7 @@ def create_app(path=None):
                         raise web.HTTPConflict(text='Recording is not ready')
                     return web.FileResponse(service.media / r['id'] / r['filename'], headers={'Content-Disposition': content_disposition(download_filename(r))})
                 if method == 'PATCH':
-                    if not body or set(body) - {'pinned', 'title'}:
+                    if not body or set(body) - {'pinned', 'title', 'auto_upload', 'upload_metadata'}:
                         raise web.HTTPBadRequest(text='PATCH accepts pinned and/or title')
                     if 'pinned' in body:
                         if not isinstance(body['pinned'], bool):
@@ -482,6 +498,13 @@ def create_app(path=None):
                         except ValueError as error:
                             raise web.HTTPBadRequest(text=str(error)) from None
                         r['title'] = title
+                    if 'auto_upload' in body or 'upload_metadata' in body:
+                        if r['state'] not in {'recording', 'reconnecting'}:
+                            raise web.HTTPConflict(text='Automatic upload overrides can only change during capture')
+                        try:
+                            service.auto_upload.prepare(r, body.get('upload_metadata', None if body.get('auto_upload') is False else r.get('automatic_upload', {}).get('metadata') if r.get('automatic_upload') else None), body.get('auto_upload'))
+                        except ValueError as error:
+                            raise web.HTTPBadRequest(text=str(error)) from None
                     if 'pinned' in body:
                         r['pinned'] = body['pinned']
                     service.save(r)

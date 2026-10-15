@@ -27,18 +27,46 @@ class Uploads:
         self.service, self.youtube, self.db = service, youtube, service.db
         self.db.execute('CREATE TABLE IF NOT EXISTS youtube_uploads(id TEXT PRIMARY KEY,payload TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS youtube_upload_keys(caller TEXT,key TEXT,fingerprint TEXT,job_id TEXT,PRIMARY KEY(caller,key))')
+        self.db.execute('CREATE TABLE IF NOT EXISTS youtube_upload_auto(recording_id TEXT PRIMARY KEY,job_id TEXT NOT NULL)')
         self.db.commit()
         self.jobs = {i:json.loads(p) for i,p in self.db.execute('SELECT id,payload FROM youtube_uploads')}
+        self._states = {i: job['state'] for i, job in self.jobs.items()}
         self.lock = asyncio.Lock()
         self.worker = None
         self.closing = False
         self.active_job = None
         service.uploads = self
 
+    def enqueue_automatic(self, record):
+        """Persist one automatic job per clean recording, never on startup scans."""
+        snapshot = record.get('automatic_upload')
+        if not snapshot or record['state'] != 'ready' or record.get('interruptions'):
+            return None
+        path = self.service.media / record['id'] / record['filename']
+        if not path.is_file() or not path.stat().st_size:
+            return None
+        prior = self.db.execute('SELECT job_id FROM youtube_upload_auto WHERE recording_id=?', (record['id'],)).fetchone()
+        if prior:
+            return self.jobs.get(prior[0])
+        job = {'id': uuid.uuid4().hex, 'recording_id': record['id'], 'file_name': record['filename'],
+               'size': path.stat().st_size, 'metadata': snapshot['metadata'],
+               'channel_id': snapshot['channel_id'], 'channel_name': snapshot['channel_name'],
+               'state': 'queued', 'attempts': 0, 'acknowledged_bytes': 0, 'session_uri': None,
+               'video_id': None, 'url': None, 'error': None, 'created_at': stamp(), 'updated_at': stamp()}
+        with self.db:
+            self.db.execute('INSERT INTO youtube_uploads VALUES(?,?)', (job['id'], json.dumps(job)))
+            self.db.execute('INSERT INTO youtube_upload_auto VALUES(?,?)', (record['id'], job['id']))
+        self.jobs[job['id']] = job
+        return job
+
     def save(self, job):
+        previous = self._states.get(job['id'])
         job['updated_at'] = stamp()
         self.db.execute('INSERT OR REPLACE INTO youtube_uploads VALUES(?,?)',(job['id'],json.dumps(job)))
         self.db.commit()
+        self._states[job['id']] = job['state']
+        if hasattr(self.service, 'webhooks'):
+            self.service.webhooks.upload_changed(job, previous)
 
     def protected(self, ident):
         return any(j['recording_id']==ident and (j['state'] in PROTECT or j['id']==self.active_job) for j in self.jobs.values())

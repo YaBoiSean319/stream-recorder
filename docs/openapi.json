@@ -416,7 +416,7 @@
             }
           }
         },
-        "description": "Idempotency-Key is optional, 1\u2013200 visible ASCII characters. Its caller-scoped mapping persists indefinitely, including after restart and recording deletion. A replay returns 201 with Idempotency-Replayed: true; a changed payload returns 409 idempotency_conflict. One active recording is allowed.",
+        "description": "Idempotency-Key is optional, 1–200 visible ASCII characters. Its caller-scoped mapping persists indefinitely, including after restart and recording deletion. A replay returns 201 with Idempotency-Replayed: true; a changed payload returns 409 idempotency_conflict. One active recording is allowed. Optional auto_upload and upload_metadata fields snapshot recording-specific upload metadata; PATCH is allowed only while capturing.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -560,7 +560,7 @@
             }
           }
         ],
-        "description": "Each field requires its matching permission; sending both requires both."
+        "description": "Each field requires its matching permission; sending both requires both. Optional auto_upload and upload_metadata fields snapshot recording-specific upload metadata; PATCH is allowed only while capturing."
       },
       "delete": {
         "operationId": "delete_recording",
@@ -1442,7 +1442,7 @@
         "operationId": "putBrandingAsset",
         "summary": "Upload or replace one shared image",
         "x-permission": "branding:write",
-        "description": "Raw PNG, JPEG, or WebP. Logos \u22642 MiB, \u22642048 px and \u22644 million pixels. Favicon \u2264512 KiB and \u2264512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
+        "description": "Raw PNG, JPEG, or WebP. Logos ≤2 MiB, ≤2048 px and ≤4 million pixels. Favicon ≤512 KiB and ≤512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2073,6 +2073,243 @@
         "responses": {
           "200": {
             "description": "Selected channel and connection state"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "listWebhooks",
+        "summary": "List webhook receivers without signing secrets",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Webhook configuration"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhook",
+        "summary": "Create a signed receiver",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "201": {
+            "description": "Receiver created; secret omitted"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url",
+                  "events",
+                  "secret"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recording.completed",
+                        "recording.failed",
+                        "upload.completed",
+                        "upload.failed"
+                      ]
+                    }
+                  },
+                  "secret": {
+                    "type": "string",
+                    "writeOnly": true,
+                    "minLength": 16,
+                    "maxLength": 256
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/{destination_id}": {
+      "get": {
+        "operationId": "getWebhook",
+        "summary": "Read a receiver without its signing secret",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Webhook configuration"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateWebhook",
+        "summary": "Update receiver configuration and optional signing secret",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Webhook configuration"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebhook",
+        "summary": "Delete receiver and cancel pending deliveries",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Webhook configuration"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/deliveries": {
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "summary": "List recent delivery outcomes, attempt counts and stable event IDs",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Recent deliveries (maximum 200)"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/automation": {
+      "get": {
+        "summary": "Read automatic upload defaults",
+        "description": "Administrator only; disabled by default. Existing recordings are never backfilled.",
+        "x-permission": "youtube:manage",
+        "responses": {
+          "200": {
+            "description": "Current automatic upload configuration"
+          }
+        }
+      },
+      "put": {
+        "summary": "Set automatic upload defaults",
+        "description": "Administrator only. Enabling requires a connected channel and explicit audience choice. Templates support recording_title, source_name, start_date, and start_time.",
+        "x-permission": "youtube:manage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "source_name": {
+                    "type": "string"
+                  },
+                  "title_template": {
+                    "type": "string"
+                  },
+                  "description_template": {
+                    "type": "string"
+                  },
+                  "privacy_status": {
+                    "type": "string",
+                    "enum": [
+                      "unlisted",
+                      "private",
+                      "public"
+                    ]
+                  },
+                  "made_for_kids": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "notify_subscribers": {
+                    "type": "boolean"
+                  },
+                  "category_id": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved configuration"
+          },
+          "400": {
+            "description": "Invalid configuration or missing channel/audience"
           }
         }
       }

@@ -25,6 +25,13 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#start').isEnabled(), false);
     await page.getByRole('link', {name:'Open Settings'}).click();
     await page.locator('#settings-screen').waitFor({state:'visible'});
+    await page.locator('#youtube-automation-form').waitFor({state:'visible'});
+    assert.equal(await page.locator('#auto-enabled').isChecked(), false, 'Automatic uploads default off');
+    await page.locator('#auto-title').fill('{recording_title} on {start_date}');
+    await page.getByRole('button', {name:'Save automatic upload settings'}).click();
+    await page.getByText('Automatic upload settings saved.').waitFor();
+    assert.equal((await (await page.request.get(base+'/api/v1/youtube/automation')).json()).title_template,
+      '{recording_title} on {start_date}');
     await snapshot(page,'desktop-settings');
     for (const theme of ['dark','light','system']) {
       await page.locator('#theme').selectOption(theme);
