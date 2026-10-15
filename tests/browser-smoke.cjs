@@ -122,7 +122,7 @@ const { chromium } = require('playwright');
     assert.equal((await submittedWrite).status(),200,'Try it uses the signed-in session and sends its CSRF token');
     assert.equal(tryItWrites,1,'The mutation runs after explicit submission');
     reopened.off('request',trackTryItWrite);
-    await operationSelect.selectOption(JSON.stringify(['put','/api/v1/branding/assets/{slot}']));
+    await operationSelect.selectOption(JSON.stringify(['PUT','/api/v1/branding/assets/{slot}']));
     await reopened.locator('#asset-label').waitFor({state:'visible'});
     await reopened.locator('#path').fill('/api/v1/branding/assets/light_logo');
     const tryItIcon = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNkYPjPwMDAxMDAwMDAAAALHwEDmIWXfgAAAABJRU5ErkJggg==','base64');
