@@ -144,7 +144,7 @@ const { chromium } = require('playwright');
     await reopened.locator('#key').fill('try-it-key-not-for-storage');
     assert.equal(await reopened.evaluate(()=>!JSON.stringify(localStorage).includes('try-it-key-not-for-storage')),true,'Entered API key must not be stored');
     await reopened.locator('#key').fill('');
-    await reopened.goto(base);
+    await reopened.goto(base+'/#settings');
     await reopened.locator('#admin-username').waitFor({state:'visible'});
     await reopened.locator('#key-label').fill('browser automation');
     await reopened.locator('#key-role').selectOption('operator');
