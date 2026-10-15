@@ -48,6 +48,8 @@ Cleanup removes the oldest unpinned Ready recordings, ordered by original start 
 
 ## API
 
+The [versioned API reference](docs/api.md) covers automation workflows and compatibility. The [GUI-to-API matrix](docs/gui-api-parity.md) maps each browser operation to its endpoint and permission. Interactive API docs run at `/api/v1/docs`; the checked OpenAPI contract is at `/api/v1/openapi.json`.
+
 Successful API routes use JSON except completed downloads. Errors return non-success HTTP status with a descriptive text body: invalid inputs 400, unknown ID 404, and busy/in-use/unavailable operations 409. Check the response before proceeding. Start conflicts never create a second session. Save the ID returned by Start so delayed calendar stops cannot stop a later recording.
 
 When built-in authentication is enabled, send `Authorization: Bearer <API_KEY>` with each API request below. Operator keys can record, preview, download and pin; administrator keys are needed for shared settings, access management and manual deletion. Invalid/missing access returns 401 and insufficient role returns 403, without interactive redirects. Cloudflare service tokens are separate credentials and may also be required by your external policy.

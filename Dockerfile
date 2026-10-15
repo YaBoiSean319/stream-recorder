@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY recorder ./recorder
+COPY docs ./docs
 RUN useradd --uid 10001 --create-home recorder && mkdir /data && chown recorder:recorder /data
 USER 10001:10001
 ENV DATA_DIR=/data PORT=8080 PYTHONUNBUFFERED=1
