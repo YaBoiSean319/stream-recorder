@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stream Recorder API</title>
+<style>
+body{font:16px system-ui;max-width:900px;margin:2rem auto;padding:0 1rem;background:#191919;color:#f4f4f4}
+a{color:#b9dafc}label{display:block;margin:1rem 0}input,textarea,select,button{font:inherit;padding:.6rem;background:#292929;color:inherit;border:1px solid #aaa;border-radius:.3rem}input,textarea{width:100%;box-sizing:border-box}textarea{height:9rem}button{cursor:pointer;background:#eee;color:#111}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #94bfff}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111;padding:1rem}option{background:#292929}[hidden]{display:none!important}.warning{border-left:4px solid #e6b450;background:#342b19;padding:.8rem}#response-image{display:block;max-width:100%;max-height:24rem;margin:1rem 0}
+</style>
+<h1>Stream Recorder API</h1>
+<p>Read the <a href="/api/v1/openapi.json">OpenAPI 3.1 contract</a>, the <a href="https://github.com/YaBoiSean319/stream-recorder/blob/main/docs/api.md">repository API reference</a>, or <a href="/">return to the recorder</a>. Requests use your current browser session and CSRF protection, or a bearer key entered for this request. No request runs until you press Send request. A submitted delete also asks for confirmation. Google consent still requires an interactive Google browser flow.</p>
+<form id="request-form">
+<label for="operation">Operation<select id="operation" required></select></label>
+<label for="path">Request path (replace identifiers in braces)<input id="path" required autocomplete="off" spellcheck="false"></label>
+<label for="key">Bearer API key (optional; used only for this request and never saved)<input id="key" type="password" autocomplete="off"></label>
+<label id="body-label" for="body">JSON request body<textarea id="body" spellcheck="false">{}</textarea></label>
+<label id="asset-label" for="asset-file" hidden>Brand image file (PNG, JPEG, or WebP)<input id="asset-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+<p id="mutation-warning" class="warning" role="note" hidden></p>
+<button type="submit">Send request</button>
+</form>
+<h2>Response</h2><pre id="result" role="status" aria-live="polite">Choose an operation and press Send request.</pre>
+<img id="response-image" alt="Image returned by the API" hidden>
+<a id="response-download" hidden>Download binary response</a>
+<script src="/static/api-docs.js" defer></script>
+</html>

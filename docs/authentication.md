@@ -2,11 +2,13 @@
 
 Authentication is off on new installations. An external access boundary can remain in place. Administrators can create a local username and password (at least 12 characters) in Settings, then enable built-in authentication. Local sign-in remains available with SSO enabled.
 
+Shared Branding settings control the SSO sign-in button text, optional icon, and independent light/dark background and text colors. The default button reads “Sign in with SSO.” These presentation settings do not change the OIDC issuer, group authorization, or local recovery path. The icon uses validated PNG/JPEG/WebP uploads and is decorative; the button text remains its accessible name. Branding reset restores the default button and removes its icon.
+
 Operators can preview, capture, stop, download and pin/unpin. Only administrators read/change shared settings, manage access and keys, or deliberately delete recordings. APIs return 401/403 without redirecting to a login page. Downloads and preview resources require the same session or API key as JSON APIs. API keys do not override busy admission or active-media protection.
 
 Use HTTPS for production. Set the HTTPS public origin in Authentication settings when TLS terminates at a reverse proxy: this makes browser cookies Secure and establishes the allowed request Origin. The application does not trust arbitrary forwarded headers. Restrict direct backend access to your trusted deployment network. Browser sessions expire after eight hours and do not survive application restart; credentials and keys do. Browser state-changing requests require `X-CSRF-Token` from `/api/auth/status` or local login. Cookies are HttpOnly and SameSite=Lax.
 
-API keys default to operator. Copy the key once at creation and keep it in your automation credential store. Use `Authorization: Bearer YOUR_API_KEY` on requests, for example:
+In Settings → Authentication and API access, create a labeled key, choose the maximum role and select only the operations that automation needs. The role is a ceiling: an operator key cannot receive administrator operations. Optionally choose an expiry in local time. The UI shows each key's permissions, expiry, and last use; `GET /api/v1/auth/permissions` lists selectable operations. A key with no selected operations is rejected. API keys default to all operator operations when the permission list is omitted for compatible clients. Copy the key once at creation and keep it in your automation credential store. Use `Authorization: Bearer YOUR_API_KEY` on requests, for example:
 
 ```sh
 curl -H 'Authorization: Bearer YOUR_API_KEY' https://recorder.example/api/status
@@ -14,7 +16,9 @@ curl -X POST -H 'Authorization: Bearer YOUR_API_KEY' -H 'Content-Type: applicati
 curl -X POST -H 'Authorization: Bearer YOUR_API_KEY' https://recorder.example/api/recordings/RECORDING_ID/stop
 ```
 
-Revoking a key immediately denies that key without affecting other keys or captures. Listing keys returns metadata, never reusable material. Only SHA-256 verifiers of high-entropy random keys are persisted. Local passwords use salted scrypt verifiers. Source and OIDC client secrets necessarily remain recoverable in the persistent database; protect the data volume and backups.
+The same operation permissions govern `/api/v1` and legacy `/api` routes. A title edit needs `recordings:title`, a pin edit needs `recordings:pin`, and a combined edit needs both. Shared settings, credentials, key management, and deliberate recording deletion need administrator permission. Revoking a key immediately denies that key without affecting other keys or captures. An expired or invalid supplied key fails even if a browser session is also present. Listing keys returns metadata, never reusable material. Only SHA-256 verifiers of high-entropy random keys are persisted. Older role-only keys acquire their equivalent role permissions on load. Local passwords use salted scrypt verifiers. Source and OIDC client secrets necessarily remain recoverable in the persistent database; protect the data volume and backups.
+
+**Require API key** starts off. Enabling it requires a configured local recovery administrator; built-in browser authentication can remain off. Machine requests need a bearer key, while signed-in browsers keep their session, normal role checks, and CSRF token. When this setting is on without built-in authentication, the browser presents local sign-in so Settings remains accessible. Save and test the administrator password before enabling; the local recovery command below remains available. Health and pre-login branding/auth status remain public. Disabling Require API key restores open local access if built-in authentication is also off.
 
 ## OIDC
 

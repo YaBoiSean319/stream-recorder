@@ -1,0 +1,3673 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stream Recorder API",
+    "version": "1.0.0",
+    "description": "Versioned API for all server-side GUI operations. Browser sessions retain role checks and CSRF; bearer keys need the operation permission. Operator and Administrator scopes are described in docs/gui-api-parity.md. Existing /api routes remain compatible aliases unless a route is explicitly v1-only. Recording start and upload enqueue support persisted caller-scoped idempotency. Browser-local theme is not shared state; Google consent remains interactive. The security schemes describe supported credentials when access control is enabled; deployments with optional authentication may allow local access. State-changing browser-session requests require X-CSRF-Token, while bearer-key requests are validated against the key permissions."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "sessionCookie": []
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Health",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "get_status",
+        "summary": "Get status",
+        "x-permission": "status:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/preview": {
+      "get": {
+        "operationId": "get_preview",
+        "summary": "Get preview",
+        "x-permission": "preview:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "get_settings",
+        "summary": "Get settings",
+        "x-permission": "settings:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "update_settings",
+        "summary": "Update settings",
+        "x-permission": "settings:write",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          }
+        },
+        "description": "Masked secret fields in responses never contain credentials. Omitted secrets retain their saved values.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/source": {
+      "get": {
+        "operationId": "get_source",
+        "summary": "Get source",
+        "x-permission": "settings:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "update_source",
+        "summary": "Update source",
+        "x-permission": "settings:write",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "get_storage",
+        "summary": "Get storage",
+        "x-permission": "settings:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Storage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "update_storage",
+        "summary": "Update storage",
+        "x-permission": "settings:write",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Storage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageUpdate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/recordings": {
+      "get": {
+        "operationId": "list_recordings",
+        "summary": "List recordings",
+        "x-permission": "recordings:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "start_recording",
+        "summary": "Start recording",
+        "x-permission": "recordings:start",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Recording admitted or idempotent replay",
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "True when this response replays an existing admission."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recording"
+                }
+              }
+            }
+          },
+          "507": {
+            "$ref": "#/components/responses/InsufficientStorage"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRecording"
+              }
+            }
+          }
+        },
+        "description": "Starts one recording if admission succeeds. Idempotency-Key is caller-scoped and persisted: identical payloads replay the original 201 response; reusing a key with a different payload returns 409 idempotency_conflict. Mappings currently do not expire. A concurrent different key can receive 409 conflict.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Visible ASCII. Same caller/key and payload replays the admission; a different payload conflicts."
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/stop": {
+      "post": {
+        "operationId": "stop_active_recording",
+        "summary": "Stop the active recording (compatibility operation)",
+        "x-permission": "recordings:stop",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopRecording"
+              }
+            }
+          }
+        },
+        "description": "Compatibility operation for clients that do not retain a recording ID. Prefer POST /api/v1/recordings/{id}/stop so a delayed retry cannot stop a later recording.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/recordings/{id}": {
+      "get": {
+        "operationId": "get_recording",
+        "summary": "Get recording",
+        "x-permission": "recordings:read",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recording"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "update_recording",
+        "summary": "Update recording",
+        "x-permission": "Field-sensitive: recordings:pin, recordings:title, recordings:start for automatic-upload overrides.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recording"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingUpdate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "description": "PATCH accepts pinned, title, and (while capture is active) auto_upload/upload_metadata overrides. Scoped keys need the permission for every field in the same request."
+      },
+      "delete": {
+        "operationId": "delete_recording",
+        "summary": "Delete recording",
+        "x-permission": "recordings:delete",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/recordings/{id}/stop": {
+      "post": {
+        "operationId": "stop_recording",
+        "summary": "Stop recording",
+        "x-permission": "recordings:stop",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recording"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/recordings/{id}/download": {
+      "get": {
+        "operationId": "download_recording",
+        "summary": "Download recording",
+        "x-permission": "recordings:download",
+        "responses": {
+          "200": {
+            "description": "Playable MP4",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "description": "Returns a playable MP4 (binary) when state is ready. Protected by the same role/key policy as the recording.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/auth/status": {
+      "get": {
+        "operationId": "auth_status_get",
+        "summary": "Auth status get",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "operationId": "auth_config_get",
+        "summary": "Auth config get",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth_config_post",
+        "summary": "Auth config post",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthConfig"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "auth_login_post",
+        "summary": "Auth login post",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "auth_logout_post",
+        "summary": "Auth logout post",
+        "x-permission": "auth:session",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/keys": {
+      "get": {
+        "operationId": "auth_keys_get",
+        "summary": "Auth keys get",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth_keys_post",
+        "summary": "Auth keys post",
+        "x-permission": "auth:manage",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Created; raw key shown once only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewKey"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/keys/{id}": {
+      "delete": {
+        "operationId": "auth_keys_{id}_delete",
+        "summary": "Auth keys {id} delete",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/auth/oidc/config": {
+      "get": {
+        "operationId": "auth_oidc_config_get",
+        "summary": "Auth oidc config get",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth_oidc_config_post",
+        "summary": "Auth oidc config post",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/oidc/login": {
+      "get": {
+        "operationId": "auth_oidc_login_get",
+        "summary": "Auth oidc login get",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/oidc/callback": {
+      "get": {
+        "operationId": "auth_oidc_callback_get",
+        "summary": "Auth oidc callback get",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/branding": {
+      "get": {
+        "operationId": "getBranding",
+        "summary": "Read public application branding",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Presentation-only branding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "dark": {
+                      "type": "object"
+                    },
+                    "light": {
+                      "type": "object"
+                    },
+                    "assets": {
+                      "type": "object",
+                      "properties": {
+                        "light_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "dark_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "favicon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      },
+      "put": {
+        "operationId": "updateBranding",
+        "summary": "Update shared name, colors, and SSO button presentation",
+        "x-permission": "branding:write",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "light": {
+                    "type": "object"
+                  },
+                  "dark": {
+                    "type": "object"
+                  },
+                  "sso_button": {
+                    "type": "object",
+                    "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                    "additionalProperties": false,
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "light": {
+                        "$ref": "#/components/schemas/SsoButtonColors"
+                      },
+                      "dark": {
+                        "$ref": "#/components/schemas/SsoButtonColors"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated branding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "dark": {
+                      "type": "object"
+                    },
+                    "light": {
+                      "type": "object"
+                    },
+                    "assets": {
+                      "type": "object",
+                      "properties": {
+                        "light_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "dark_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "favicon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/branding/reset": {
+      "post": {
+        "operationId": "resetBranding",
+        "summary": "Reset name, colors, logos, and favicon",
+        "x-permission": "branding:write",
+        "responses": {
+          "200": {
+            "description": "Reset branding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "dark": {
+                      "type": "object"
+                    },
+                    "light": {
+                      "type": "object"
+                    },
+                    "assets": {
+                      "type": "object",
+                      "properties": {
+                        "light_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "dark_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "favicon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/branding/assets/{slot}": {
+      "parameters": [
+        {
+          "name": "slot",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "light_logo",
+              "dark_logo",
+              "favicon",
+              "sso_icon"
+            ]
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getBrandingAsset",
+        "summary": "Read public image for the selected slot",
+        "x-permission": "public",
+        "responses": {
+          "200": {
+            "description": "Clean decoded PNG image",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Image not configured"
+          }
+        },
+        "security": []
+      },
+      "put": {
+        "operationId": "putBrandingAsset",
+        "summary": "Upload or replace one shared image",
+        "x-permission": "branding:write",
+        "description": "Raw PNG, JPEG, or WebP. Logos ≤2 MiB, ≤2048 px and ≤4 million pixels. Favicon ≤512 KiB and ≤512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
+        "requestBody": {
+          "required": true,
+          "description": "Raw decoded image input; file picker in the interactive docs sends the selected PNG, JPEG, or WebP bytes.",
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Branding with versioned asset URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "dark": {
+                      "type": "object"
+                    },
+                    "light": {
+                      "type": "object"
+                    },
+                    "assets": {
+                      "type": "object",
+                      "properties": {
+                        "light_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "dark_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "favicon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "Upload exceeds the size limit"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteBrandingAsset",
+        "summary": "Clear one shared image",
+        "x-permission": "branding:write",
+        "responses": {
+          "200": {
+            "description": "Branding after clearing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "dark": {
+                      "type": "object"
+                    },
+                    "light": {
+                      "type": "object"
+                    },
+                    "assets": {
+                      "type": "object",
+                      "properties": {
+                        "light_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "dark_logo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "favicon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        },
+                        "sso_icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uri-reference"
+                        }
+                      }
+                    },
+                    "sso_button": {
+                      "type": "object",
+                      "description": "Presentation-only SSO login button; local administrator sign-in remains available.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "light": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        },
+                        "dark": {
+                          "$ref": "#/components/schemas/SsoButtonColors"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/permissions": {
+      "get": {
+        "operationId": "auth_permissions_get",
+        "summary": "List selectable operations by role",
+        "x-permission": "auth:manage",
+        "responses": {
+          "200": {
+            "description": "Operation permissions for operator and administrator keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "operator",
+                    "admin"
+                  ],
+                  "properties": {
+                    "operator": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "admin": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/config": {
+      "get": {
+        "summary": "Read masked YouTube configuration",
+        "description": "Requires youtube:manage (Administrator).",
+        "responses": {
+          "200": {
+            "description": "Masked configuration; never client secrets or OAuth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConfig"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "x-permission": "youtube:manage",
+        "operationId": "get_config"
+      },
+      "put": {
+        "summary": "Save shared Google OAuth client settings",
+        "description": "Requires youtube:manage. Blank or omitted client_secret retains the saved secret. Changing credentials/origin disconnects the previous channel.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YouTubeConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Masked configuration; never client secrets or OAuth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration"
+          },
+          "401": {
+            "description": "Sign-in or browser flow required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "x-permission": "youtube:manage",
+        "operationId": "put_config",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/youtube/status": {
+      "get": {
+        "summary": "Inspect connected YouTube channel",
+        "description": "Requires youtube:manage. Includes channel ID/name and reconnect_required; never tokens.",
+        "responses": {
+          "200": {
+            "description": "Masked configuration; never client secrets or OAuth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConfig"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "x-permission": "youtube:manage",
+        "operationId": "get_status"
+      }
+    },
+    "/api/v1/youtube/connect": {
+      "post": {
+        "summary": "Begin interactive Google authorization",
+        "description": "Requires Administrator browser session (and CSRF token when authentication enabled). Returns authorization_url for interactive consent; PKCE and browser-bound state expire in five minutes.",
+        "responses": {
+          "200": {
+            "description": "Interactive Google authorization URL; visit in the initiating browser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "authorization_url"
+                  ],
+                  "properties": {
+                    "authorization_url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration"
+          },
+          "401": {
+            "description": "Sign-in or browser flow required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "x-permission": "Administrator browser session; interactive Google consent required",
+        "operationId": "post_connect",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "maxProperties": 0
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/youtube/callback": {
+      "get": {
+        "summary": "Complete Google authorization in the initiating browser",
+        "description": "Requires one-use state, the original browser binding, and Administrator session when built-in authentication is enabled.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One-use state bound to the initiating browser."
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Return to Settings on success"
+          },
+          "401": {
+            "description": "Missing, expired, or mismatched state/browser"
+          },
+          "502": {
+            "description": "Google authorization or channel lookup failed"
+          }
+        },
+        "x-permission": "browser-bound Google OAuth callback",
+        "operationId": "get_callback"
+      }
+    },
+    "/api/v1/youtube/refresh": {
+      "post": {
+        "summary": "Refresh offline YouTube authorization",
+        "description": "Requires youtube:manage; a revoked grant returns 409 and flags reconnect_required.",
+        "responses": {
+          "200": {
+            "description": "Masked configuration; never client secrets or OAuth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConfig"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Reconnect required"
+          }
+        },
+        "x-permission": "youtube:manage",
+        "operationId": "post_refresh",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/youtube/connection": {
+      "delete": {
+        "summary": "Disconnect the shared YouTube channel",
+        "description": "Requires youtube:manage. Removes locally stored tokens; does not revoke prior Google consent remotely.",
+        "responses": {
+          "200": {
+            "description": "Masked configuration; never client secrets or OAuth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConfig"
+                }
+              }
+            }
+          }
+        },
+        "x-permission": "youtube:manage",
+        "operationId": "delete_connection",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/uploads": {
+      "get": {
+        "operationId": "listUploads",
+        "summary": "List YouTube upload jobs",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Newest-first upload jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{job_id}": {
+      "get": {
+        "operationId": "getUpload",
+        "summary": "Get one upload job",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "One upload job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/recordings/{recording_id}/uploads": {
+      "get": {
+        "operationId": "listRecordingUploads",
+        "summary": "List uploads for recording",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Jobs for the recording, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRecordingUpload",
+        "summary": "Queue a YouTube upload",
+        "x-permission": "uploads:create",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadMetadata"
+              }
+            }
+          }
+        },
+        "description": "Queues a finalized recording to the currently connected shared channel. Metadata and channel are snapshotted. Idempotency-Key is caller-scoped and persisted; identical payloads replay the job and a different payload returns 409. This cannot guarantee exactly-once remote creation when YouTube outcome is uncertain.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Visible ASCII. Replays the queued job for the same caller/key/payload."
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "recording_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/uploads/{job_id}/retry": {
+      "post": {
+        "operationId": "RetryUpload",
+        "summary": "Retry upload",
+        "x-permission": "uploads:retry",
+        "responses": {
+          "200": {
+            "description": "Upload job after retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/uploads/{job_id}/cancel": {
+      "post": {
+        "operationId": "CancelUpload",
+        "summary": "Cancel upload",
+        "x-permission": "uploads:cancel",
+        "responses": {
+          "200": {
+            "description": "Upload job after cancellation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/uploads/{job_id}/requeue": {
+      "post": {
+        "operationId": "RequeueUpload",
+        "summary": "Requeue upload",
+        "x-permission": "uploads:retry",
+        "responses": {
+          "200": {
+            "description": "Upload job or collection"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "New upload job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "description": "When the prior state is uncertain, set reconciled=true only after checking the YouTube channel. Requeue may create a separate remote video.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reconciled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/uploads/{job_id}/release": {
+      "post": {
+        "operationId": "ReleaseUpload",
+        "summary": "Release upload",
+        "x-permission": "uploads:cancel",
+        "responses": {
+          "200": {
+            "description": "Upload job after protection release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "201": {
+            "description": "Upload queued"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/uploads/channel": {
+      "get": {
+        "operationId": "getUploadChannel",
+        "summary": "Read selected upload channel identity",
+        "x-permission": "uploads:read",
+        "responses": {
+          "200": {
+            "description": "Selected channel and connection state"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "listWebhooks",
+        "summary": "List webhook receivers without signing secrets",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Receiver settings; signing secrets are omitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookDestination"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhook",
+        "summary": "Create a signed receiver",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "201": {
+            "description": "Receiver created; secret omitted"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookCreate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/webhooks/{destination_id}": {
+      "get": {
+        "operationId": "getWebhook",
+        "summary": "Read a receiver without its signing secret",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "One receiver; signing secret omitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDestination"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateWebhook",
+        "summary": "Update receiver configuration and optional signing secret",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Webhook configuration"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Administrator permission required"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookUpdate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteWebhook",
+        "summary": "Delete receiver and cancel pending deliveries",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Receiver deleted and pending deliveries canceled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "destination_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable identifier from the preceding list or create response."
+        }
+      ]
+    },
+    "/api/v1/webhooks/deliveries": {
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "summary": "List recent delivery outcomes, attempt counts and stable event IDs",
+        "x-permission": "webhooks:manage",
+        "responses": {
+          "200": {
+            "description": "Latest 200 webhook deliveries, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/youtube/automation": {
+      "get": {
+        "summary": "Read automatic upload defaults",
+        "description": "Administrator only; disabled by default. Existing recordings are never backfilled.",
+        "x-permission": "youtube:manage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomaticUploadSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set automatic upload defaults",
+        "description": "Administrator only. Enabling requires a connected channel and explicit audience choice. Templates support recording_title, source_name, start_date, and start_time.",
+        "x-permission": "youtube:manage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomaticUploadSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomaticUploadSettings"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "operationId": "get_openapi_contract",
+        "summary": "Read OpenAPI contract",
+        "description": "Available through the same application access boundary as the interactive docs.",
+        "x-permission": "current application access",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 JSON document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/docs": {
+      "get": {
+        "operationId": "get_interactive_docs",
+        "summary": "Read interactive API docs",
+        "description": "Try it uses the current browser session and CSRF protection or a bearer key entered for the current page. Mutations run only after explicit form submission.",
+        "x-permission": "current application access",
+        "responses": {
+          "200": {
+            "description": "Interactive API documentation",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "recorder_session"
+      }
+    },
+    "schemas": {
+      "Object": {
+        "type": "object"
+      },
+      "Preview": {
+        "type": "object",
+        "required": [
+          "source_configured",
+          "preview_url"
+        ],
+        "properties": {
+          "source_configured": {
+            "type": "boolean"
+          },
+          "preview_url": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "not_found",
+                  "method_not_allowed",
+                  "conflict",
+                  "idempotency_conflict",
+                  "rate_limited",
+                  "insufficient_storage",
+                  "request_failed"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Recording": {
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "started_at",
+          "pinned"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "recording",
+              "reconnecting",
+              "recovering",
+              "processing",
+              "ready",
+              "error"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "progress": {
+            "type": "number"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interruptions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "RecordingPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "next_offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Recording"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "next_offset": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "StartRecording": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 31536000
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "auto_upload": {
+            "type": "boolean"
+          },
+          "upload_metadata": {
+            "$ref": "#/components/schemas/UploadMetadata"
+          }
+        }
+      },
+      "RecordingUpdate": {
+        "type": "object",
+        "properties": {
+          "pinned": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "auto_upload": {
+            "type": "boolean"
+          },
+          "upload_metadata": {
+            "$ref": "#/components/schemas/UploadMetadata"
+          }
+        }
+      },
+      "StopRecording": {
+        "type": "object",
+        "properties": {
+          "recording_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "storage_cap_bytes": {
+            "type": "integer",
+            "minimum": 1048576
+          },
+          "source_basic_username": {
+            "type": "string"
+          },
+          "source_basic_password": {
+            "type": "string"
+          },
+          "source_bearer_token": {
+            "type": "string"
+          },
+          "source_headers": {
+            "type": "object"
+          },
+          "clear_source_secrets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Storage": {
+        "type": "object",
+        "properties": {
+          "media_bytes": {
+            "type": "integer"
+          },
+          "cap_bytes": {
+            "type": "integer"
+          },
+          "total_bytes": {
+            "type": "integer"
+          },
+          "free_bytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "StorageUpdate": {
+        "type": "object",
+        "required": [
+          "storage_cap_bytes"
+        ],
+        "properties": {
+          "storage_cap_bytes": {
+            "type": "integer",
+            "minimum": 1048576
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "require_api_key": {
+            "type": "boolean"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12
+          },
+          "public_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "Login": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "NewKey": {
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "operator"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Subset of operations allowed for the selected role. Omit for the full role permission set."
+          },
+          "expires_at": {
+            "type": "number",
+            "description": "Future Unix timestamp in seconds; omit for a key without expiry."
+          }
+        }
+      },
+      "SsoButtonColors": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "type": "string",
+            "description": "Hex or CSS rgb() color"
+          },
+          "text": {
+            "type": "string",
+            "description": "Hex or CSS rgb() color"
+          }
+        }
+      },
+      "YouTubeUpload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "recording_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "uploading",
+              "paused",
+              "failed",
+              "uncertain",
+              "completed",
+              "canceled",
+              "released"
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "channel_id": {
+            "type": "string"
+          },
+          "acknowledged_bytes": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "YouTubeConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "reconnect_required": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret_saved": {
+            "type": "boolean"
+          },
+          "public_url": {
+            "type": "string"
+          },
+          "callback_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected",
+          "reconnect_required",
+          "client_secret_saved"
+        ]
+      },
+      "YouTubeConfigUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "client_secret": {
+            "type": "string",
+            "writeOnly": true,
+            "maxLength": 2048
+          },
+          "remove_client_secret": {
+            "type": "boolean"
+          },
+          "public_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "AutomaticUploadSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "source_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "title_template": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "description_template": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "privacy_status": {
+            "type": "string",
+            "enum": [
+              "unlisted",
+              "private",
+              "public"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          "category_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "made_for_kids": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "notify_subscribers": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "source_name",
+          "title_template",
+          "description_template",
+          "privacy_status",
+          "tags",
+          "category_id",
+          "made_for_kids",
+          "notify_subscribers"
+        ]
+      },
+      "UploadMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "privacy_status": {
+            "type": "string",
+            "enum": [
+              "unlisted",
+              "private",
+              "public"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "category_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "made_for_kids": {
+            "type": "boolean"
+          },
+          "notify_subscribers": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "made_for_kids"
+        ]
+      },
+      "UploadJob": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "recording_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "uploading",
+              "paused",
+              "failed",
+              "uncertain",
+              "completed",
+              "canceled",
+              "released"
+            ]
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/UploadMetadata"
+          },
+          "channel_id": {
+            "type": "string"
+          },
+          "channel_name": {
+            "type": "string"
+          },
+          "acknowledged_bytes": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "video_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_attempt": {
+            "type": "number"
+          },
+          "pause_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "connection",
+              null
+            ]
+          },
+          "file_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "recording_id",
+          "state",
+          "metadata",
+          "channel_id",
+          "acknowledged_bytes",
+          "size",
+          "attempts"
+        ]
+      },
+      "UploadPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadJob"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WebhookInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "recording.completed",
+                "recording.failed",
+                "upload.completed",
+                "upload.failed"
+              ]
+            }
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url",
+          "events",
+          "secret",
+          "enabled"
+        ]
+      },
+      "WebhookDestination": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "secret_saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "events",
+          "enabled",
+          "secret_saved"
+        ]
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "destination_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "delivered",
+              "failed",
+              "canceled"
+            ]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "next_attempt": {
+            "type": "number"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookDeliveryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WebhookCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "recording.completed",
+                "recording.failed",
+                "upload.completed",
+                "upload.failed"
+              ]
+            }
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url",
+          "events",
+          "secret"
+        ]
+      },
+      "WebhookUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "recording.completed",
+                "recording.failed",
+                "upload.completed",
+                "upload.failed"
+              ]
+            }
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "description": "Omitted fields retain their current values; an omitted secret leaves the existing signing secret unchanged."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "BadRequest",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Forbidden",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InsufficientStorage": {
+        "description": "InsufficientStorage",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "CsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Required for state-changing browser-session requests. Omit for bearer-key requests; the key must have the operation permission."
+      }
+    }
+  }
+}

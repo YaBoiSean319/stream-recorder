@@ -1,8 +1,9 @@
-import asyncio, ctypes, datetime as dt, fcntl, json, os, shutil, signal, sqlite3, time, uuid
+import asyncio, ctypes, datetime as dt, fcntl, hashlib, json, os, shutil, signal, sqlite3, time, uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 from aiohttp import web
 from .source import SourceRelay, source_config, public_record, public_source, update_source
+from .titles import validate_title, download_filename, content_disposition
 ACTIVE = {'recording', 'reconnecting', 'recovering', 'processing'}
 SUPERVISOR_PID = os.getpid()
 
@@ -30,12 +31,14 @@ class Recorder:
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY,payload TEXT)')
         self.db.execute('CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY,payload TEXT)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS idempotency(caller TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL, recording_id TEXT NOT NULL, PRIMARY KEY(caller,key))')
         row = self.db.execute('SELECT payload FROM settings WHERE id=1').fetchone()
         defaults = {'source_url': '', 'storage_cap_bytes': 100 * 1024 ** 3, 'auth_enabled': False}
         self.settings = {**defaults, **(json.loads(row[0]) if row else {})}
         self.db.execute('INSERT OR REPLACE INTO settings VALUES(1,?)', (json.dumps(self.settings),))
         self.db.commit()
         self.records = {i: json.loads(p) for i, p in self.db.execute('SELECT id,payload FROM records')}
+        self._record_states = {i: r['state'] for i, r in self.records.items()}
         self.gate = asyncio.Lock()
         self.task = None
         self.proc = None
@@ -45,8 +48,21 @@ class Recorder:
         self.capture_input_options = None
 
     def save(self, r):
+        previous = getattr(self, '_record_states', {}).get(r['id'])
         self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
         self.db.commit()
+        self._record_states[r['id']] = r['state']
+        if hasattr(self, 'webhooks'):
+            self.webhooks.recording_changed(r, previous)
+
+    def admit(self, r, caller, key, fingerprint):
+        # Save admission and retry mapping together. A process crash can never
+        # leave a recording that an acknowledged retry key cannot find.
+        with self.db:
+            self.db.execute('INSERT INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
+            if key is not None:
+                self.db.execute('INSERT INTO idempotency VALUES(?,?,?,?)',
+                                (caller, key, fingerprint, r['id']))
 
     def active(self):
         return next((r for r in self.records.values() if r['state'] in ACTIVE), None)
@@ -58,8 +74,11 @@ class Recorder:
         return {'media_bytes': media_bytes, 'cap_bytes': cap, 'total_bytes': disk.total, 'free_bytes': disk.free, 'cap_exceeded': media_bytes > cap}
 
     def remove(self, r):
+        if hasattr(self, 'uploads') and self.uploads.protected(r['id']):
+            raise ValueError('Upload protects this recording')
         shutil.rmtree(self.media / r['id'], ignore_errors=True)
         self.records.pop(r['id'])
+        self._record_states.pop(r['id'], None)
         self.db.execute('DELETE FROM records WHERE id=?', (r['id'],))
         self.db.commit()
 
@@ -68,7 +87,7 @@ class Recorder:
             u = self.usage()
             if u['media_bytes'] + need <= u['cap_bytes'] and u['free_bytes'] >= need:
                 return True
-            if r['state'] == 'ready' and (not r['pinned']):
+            if r['state'] == 'ready' and (not r['pinned']) and not (hasattr(self, 'uploads') and self.uploads.protected(r['id'])):
                 self.remove(r)
         u = self.usage()
         return u['media_bytes'] + need <= u['cap_bytes'] and u['free_bytes'] >= need
@@ -299,6 +318,8 @@ class Recorder:
         r['state'] = 'ready'
         r['progress'] = 100
         self.save(r)
+        if r.get('automatic_upload') and not r.get('interruptions'):
+            self.uploads.enqueue_automatic(r)
         for p in pieces:
             p.unlink()
 
@@ -307,14 +328,29 @@ def create_app(path=None):
     app = web.Application()
     from recorder.auth import install
     access = install(app, service)
+    from recorder.youtube import install as install_youtube
+    install_youtube(app, service, access)
+    from recorder.uploads import install as install_uploads
+    install_uploads(app, service, app['youtube_connection'])
+    from recorder.webhooks import install as install_webhooks
+    install_webhooks(app, service)
+    from recorder.automatic_upload import install as install_automatic_upload
+    install_automatic_upload(app, service, app['youtube_connection'])
     app[web.AppKey('recorder', Recorder)] = service
+    from recorder.branding import install as install_branding
+    install_branding(app, service)
 
     async def api(request):
         try:
             async with service.gate:
                 route = request.match_info.get('tail', '')
+                versioned = route == 'v1' or route.startswith('v1/')
+                if versioned:
+                    route = route[3:] if route.startswith('v1/') else ''
                 method = request.method
                 allowed = {'settings': {'GET', 'PUT'}, 'status': {'GET'}, 'recordings': {'GET', 'POST'}, 'stop': {'POST'}}
+                if versioned:
+                    allowed.update({'health': {'GET'}, 'preview': {'GET'}, 'source': {'GET', 'PUT'}, 'storage': {'GET', 'PUT'}})
                 if route in allowed:
                     if method not in allowed[route]:
                         raise web.HTTPMethodNotAllowed(method, allowed[route])
@@ -330,11 +366,23 @@ def create_app(path=None):
                         raise web.HTTPMethodNotAllowed(method, methods)
                 else:
                     raise web.HTTPNotFound()
-                body = await request.json() if request.can_read_body else {}
+                body = request['parsed_patch'] if 'parsed_patch' in request else await request.json() if request.can_read_body else {}
                 if not isinstance(body, dict):
                     raise web.HTTPBadRequest(text='JSON object required')
-                if route == 'settings':
+                if route == 'health':
+                    return web.json_response({'ok': True})
+                if route == 'preview':
+                    configured = bool(service.settings['source_url'])
+                    return web.json_response({'source_configured': configured,
+                                              'preview_url': service.relay.register(source_config(service.settings)) if configured else ''})
+                if route == 'storage' and method == 'GET':
+                    return web.json_response(service.usage())
+                if route in {'settings', 'source', 'storage'}:
                     if method == 'PUT':
+                        if route == 'storage' and set(body) - {'storage_cap_bytes'}:
+                            raise web.HTTPBadRequest(text='Only storage_cap_bytes can be updated through /storage')
+                        if route == 'source' and set(body) - {'source_url', 'source_basic_username', 'source_basic_password', 'source_bearer_token', 'source_headers', 'clear_source_secrets'}:
+                            raise web.HTTPBadRequest(text='Only stream source fields can be updated through /source')
                         try:
                             settings = update_source(service.settings, body)
                         except ValueError as error:
@@ -355,16 +403,50 @@ def create_app(path=None):
                     visible = public_source(service.settings)
                     visible['auth_enabled'] = access.state['enabled']
                     visible['preview_url'] = service.relay.register(source_config(service.settings)) if visible['source_configured'] else ''
+                    if route == 'storage':
+                        return web.json_response(service.usage())
                     return web.json_response(visible)
                 if route == 'status':
                     configured = bool(service.settings['source_url'])
                     return web.json_response({'active': public_record(service.active()), 'storage': service.usage(), 'source_configured': configured, 'preview_url': service.relay.register(source_config(service.settings)) if configured else ''})
                 if route == 'recordings' and method == 'GET':
-                    return web.json_response([public_record(r) for r in sorted(service.records.values(), key=lambda r: r['started_at'], reverse=True)])
+                    ordered = [public_record(r) for r in sorted(service.records.values(), key=lambda r: (r['started_at'], r['id']), reverse=True)]
+                    if versioned:
+                        try:
+                            limit = int(request.query.get('limit', '50'))
+                            offset = int(request.query.get('offset', '0'))
+                        except ValueError:
+                            raise web.HTTPBadRequest(text='limit and offset must be integers') from None
+                        if not 1 <= limit <= 200 or offset < 0 or set(request.query) - {'limit', 'offset'}:
+                            raise web.HTTPBadRequest(text='limit must be 1–200, offset nonnegative, and query parameters known')
+                        next_offset = offset + limit if offset + limit < len(ordered) else None
+                        return web.json_response({'items': ordered[offset:offset+limit], 'total': len(ordered),
+                                                  'limit': limit, 'offset': offset, 'next_offset': next_offset})
+                    return web.json_response(ordered)
                 if route == 'recordings' and method == 'POST':
+                    title = None
+                    if 'title' in body:
+                        try:
+                            title = validate_title(body['title'])
+                        except ValueError as error:
+                            raise web.HTTPBadRequest(text=str(error)) from None
                     duration = body.get('duration_seconds')
                     if duration is not None and (isinstance(duration, bool) or not isinstance(duration, (float, int)) or (not 0 < duration <= 31536000)):
                         raise web.HTTPBadRequest(text='Duration must be positive seconds, at most one year')
+                    key = request.headers.get('Idempotency-Key')
+                    if key is not None and (not 1 <= len(key) <= 200 or any(ord(c) < 33 or ord(c) > 126 for c in key)):
+                        raise web.HTTPBadRequest(text='Idempotency-Key must contain 1–200 visible ASCII characters')
+                    caller = request.get('caller_id', 'local')
+                    fingerprint = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                    if key is not None:
+                        previous = service.db.execute('SELECT fingerprint,recording_id FROM idempotency WHERE caller=? AND key=?', (caller, key)).fetchone()
+                        if previous:
+                            if previous[0] != fingerprint:
+                                raise web.HTTPConflict(text='Idempotency key reused with changed request', headers={'X-Error-Code':'idempotency_conflict'})
+                            saved = service.records.get(previous[1])
+                            if saved is None:
+                                raise web.HTTPConflict(text='Idempotent recording was deleted; use a new key')
+                            return web.json_response(public_record(saved), status=201, headers={'Idempotency-Replayed':'true'})
                     if service.active():
                         raise web.HTTPConflict(text='Recorder busy capturing or processing')
                     if not service.settings['source_url']:
@@ -374,10 +456,16 @@ def create_app(path=None):
                     now = dt.datetime.now(dt.timezone.utc)
                     ident = uuid.uuid4().hex
                     r = {'id': ident, 'state': 'recording', 'started_at': now.isoformat(), 'deadline': (now + dt.timedelta(seconds=duration)).isoformat() if duration else None, 'filename': now.strftime('%Y-%m-%d_%H-%M-%S_UTC') + '_' + ident[:8] + '.mp4', 'source_url': service.settings['source_url'], 'pinned': False, 'progress': 0, 'error': None, 'interruptions': [], 'stop_requested': False}
+                    if title is not None:
+                        r['title'] = title
+                    try:
+                        service.auto_upload.prepare(r, body.get('upload_metadata'), body.get('auto_upload'))
+                    except ValueError as error:
+                        raise web.HTTPBadRequest(text=str(error)) from None
                     service.records[ident] = r
                     r['source_config'] = source_config(service.settings)
                     r.pop('source_url', None)
-                    service.save(r)
+                    service.admit(r, caller, key, fingerprint)
                     service.task = asyncio.create_task(service.run(r))
                     return web.json_response(public_record(r), status=201)
                 parts = route.split('/')
@@ -397,15 +485,32 @@ def create_app(path=None):
                 if action == 'download':
                     if r['state'] != 'ready':
                         raise web.HTTPConflict(text='Recording is not ready')
-                    return web.FileResponse(service.media / r['id'] / r['filename'], headers={'Content-Disposition': 'attachment; filename="' + r['filename'] + '"'})
+                    return web.FileResponse(service.media / r['id'] / r['filename'], headers={'Content-Disposition': content_disposition(download_filename(r))})
                 if method == 'PATCH':
-                    if not isinstance(body.get('pinned'), bool):
-                        raise web.HTTPBadRequest(text='pinned must be boolean')
-                    r['pinned'] = body['pinned']
+                    if not body or set(body) - {'pinned', 'title', 'auto_upload', 'upload_metadata'}:
+                        raise web.HTTPBadRequest(text='PATCH accepts pinned and/or title')
+                    if 'pinned' in body:
+                        if not isinstance(body['pinned'], bool):
+                            raise web.HTTPBadRequest(text='pinned must be boolean')
+                    if 'title' in body:
+                        try:
+                            title = validate_title(body['title'])
+                        except ValueError as error:
+                            raise web.HTTPBadRequest(text=str(error)) from None
+                        r['title'] = title
+                    if 'auto_upload' in body or 'upload_metadata' in body:
+                        if r['state'] not in {'recording', 'reconnecting'}:
+                            raise web.HTTPConflict(text='Automatic upload overrides can only change during capture')
+                        try:
+                            service.auto_upload.prepare(r, body.get('upload_metadata', None if body.get('auto_upload') is False else r.get('automatic_upload', {}).get('metadata') if r.get('automatic_upload') else None), body.get('auto_upload'))
+                        except ValueError as error:
+                            raise web.HTTPBadRequest(text=str(error)) from None
+                    if 'pinned' in body:
+                        r['pinned'] = body['pinned']
                     service.save(r)
                 if method == 'DELETE':
-                    if r['state'] in ACTIVE:
-                        raise web.HTTPConflict(text='Recording media is in use')
+                    if r['state'] in ACTIVE or service.uploads.protected(r['id']):
+                        raise web.HTTPConflict(text='Recording media is in use or protected by an upload')
                     service.remove(r)
                     return web.json_response({'deleted': ident})
                 return web.json_response(public_record(r))
@@ -415,13 +520,19 @@ def create_app(path=None):
     async def health(request):
         return web.json_response({'ok': True})
     app.router.add_get('/api/health', health)
+    static = Path(__file__).parent / 'static'
+    docs = Path(__file__).parent.parent / 'docs' / 'openapi.json'
+    async def openapi(request):
+        return web.FileResponse(docs, headers={'Cache-Control': 'no-store', 'Content-Type': 'application/json'})
+    async def api_docs(request):
+        return web.FileResponse(static / 'api-docs.html', headers={'Cache-Control': 'no-store'})
+    app.router.add_get('/api/v1/openapi.json', openapi)
+    app.router.add_get('/api/v1/docs', api_docs)
     app.router.add_route('*', '/api/{tail:.*}', api)
     app.router.add_get('/health', health)
     app.router.add_get('/preview/{token}', service.relay.handle)
     app.on_startup.append(service.startup)
     app.on_cleanup.append(service.shutdown)
-    static = Path(__file__).parent / 'static'
-
     async def index(request):
         return web.FileResponse(static / 'index.html')
     app.router.add_get('/', index)

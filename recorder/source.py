@@ -187,6 +187,9 @@ def public_record(record):
     if record is None:
         return None
     result = {key: value for key, value in record.items() if key not in {'source_url', 'source_config'}}
+    from .titles import recording_title, download_filename
+    result['title'] = recording_title(record)
+    result['filename'] = download_filename(record)
     url = record.get('source_config', {}).get('source_url', record.get('source_url', ''))
     safe_url = public_source_url(url)
     if safe_url:

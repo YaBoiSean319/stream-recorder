@@ -22,15 +22,23 @@ To use a host storage directory, replace `recorder-data:/data` with `/your/stora
 
 Open **Settings → Source** and save your direct HTTP(S) HLS playlist URL. Signed or dynamic playlist endpoints need not end in `.m3u8`; webpage extraction is not supported. Set the media cap under Storage, then return to Recorder. Until a source is configured, the preview shows setup guidance and Start remains disabled; the API rejects admission without creating a session. Use the explicit clear-source control to remove it; blank masked fields retain saved values. Source, Storage, Authentication/API access and Appearance live in Settings; the recorder retains its preview, capture, storage status, and recordings arrangement. Protected sources support Basic credentials, bearer tokens and custom headers; see the protected-source configuration below.
 
-**Settings → Appearance** offers Dark, Light, or System and Mint, Blue, or Rose accents. Fresh browsers use the established Dark/Mint appearance. Preferences save automatically per browser/device, not to shared installation settings. System follows device color-scheme changes; invalid saved preferences fall back to Dark/Mint. With browser storage blocked, choices still apply for the current page session.
+**Settings → Appearance** offers System, Light, or Dark. New browsers default to System and follow device color-scheme changes. The choice remains local to each browser and works for the current page session if storage is blocked. Existing valid theme choices survive updates; prior browser-local Mint/Blue/Rose accents are ignored because colors now belong to shared branding.
+
+**Settings → Shared branding** (Administrator access when authentication is enabled) changes the app name and accent, background, surface, and text colors independently for light and dark modes. Each color can be entered as `#RGB`, `#RRGGBB`, or `rgb(0, 0, 0)`, or chosen with a color picker. The unsaved preview updates the current page and browser title; contrast warnings identify text or accent combinations below 4.5:1. Save applies the colors to all browsers; Discard preview restores saved values. Reset branding restores only the grayscale defaults, leaving source, storage, authentication, and recordings alone. Server state lives in the persistent application data volume.
+
+The public `GET /api/v1/branding` returns presentation data for the sign-in page, including name and light/dark colors. An Administrator can `PUT /api/v1/branding` with any subset of `name`, `light`, and `dark`, or `POST /api/v1/branding/reset` to restore defaults. The previous `/api/branding` path is an alias. Invalid names or colors return HTTP 400 without changing saved state. Browser theme selection is local and has no shared API operation.
+
+**Settings → Shared branding → Images** accepts separate light and dark logos and a favicon. Upload a PNG, JPEG, or WebP; the server decodes the image and stores a clean PNG on the persistent application data volume. SVG, animation, malformed files, and trailing content are rejected. Each logo has a 2 MiB input limit and a maximum dimension of 2048 pixels (up to 4 million pixels); the favicon has a 512 KiB input limit and a maximum dimension of 512 pixels. Choose files to preview on the current page, then Save branding to apply them everywhere. Discard preview reverts unsaved choices. Clear an image and Save branding to remove one slot, or Reset branding to remove all images and restore default colors and name. Current theme determines which logo appears in the header and login screen; the favicon applies to both themes.
+
+`GET /api/v1/branding` includes an `assets` object with `light_logo`, `dark_logo`, and `favicon` URLs or `null`. Each URL uses a content version query and has a public `GET /api/v1/branding/assets/{slot}` equivalent, served as `image/png` with `Cache-Control: no-store`. Administrators can replace an image with raw `PUT` bytes and the matching image `Content-Type`, or `DELETE` one slot. The binary endpoints also have `/api/branding/assets/{slot}` aliases. Invalid uploads return HTTP 400 (oversize uploads return 413) and leave the previous image intact. No stored source credentials or settings are included in the public presentation response.
 
 The preview uses bundled hls.js 1.6.13 (MIT license), with native HLS on supporting browsers. The application relays playlists and referenced resources server-side, so browsers reach the recorder rather than the upstream source and do not receive upstream credentials. Preview follows the same access boundary as recording/downloads. Browser autoplay restrictions may require pressing Play. A preview failure does not cancel server capture.
 
-Start immediately, optionally enter a duration in minutes, and stop when finished. The server owns capture: closing the browser does not stop it. Exactly one session is admitted through capture, reconnecting, restart recovery, and MP4 processing. The next recording can start after Ready or terminal Error. Downloads become available only after final output validation. Pin important footage to prevent automatic cleanup. Manual deletion requires UI confirmation and can deliberately remove pinned footage.
+Start immediately, optionally enter a recording title and duration in minutes, and stop when finished. Rename a recording from its library row at any time; its title and future download name change, while its ID and capture date stay fixed. The server owns capture: closing the browser does not stop it. Exactly one session is admitted through capture, reconnecting, restart recovery, and MP4 processing. The next recording can start after Ready or terminal Error. Downloads become available only after final output validation. Pin important footage to prevent automatic cleanup. Manual deletion requires UI confirmation and can deliberately remove pinned footage.
 
 Settings apply to future recordings; the active session retains its original source. Duration includes outages and container downtime. Manual sessions resume after restart until stopped; timed sessions retain their original deadline. A session whose deadline expired while offline proceeds to finalization. Explicitly stopped sessions do not resume. Interrupted finalization is recovered at startup.
 
-Outages are recorded as interruptions. Reconnection preserves available footage but cannot reconstruct missing footage. HLS segment boundaries and connection timing mean starts/stops are not frame-exact; use the deterministic tests to characterize your source. MP4 filenames use the original start timestamp in UTC: `YYYY-MM-DD_HH-MM-SS_UTC_shortid.mp4`. The browser displays times in its local timezone. Compatible video/audio are remuxed to retain quality; incompatible media use H.264/AAC conversion.
+Outages are recorded as interruptions. Reconnection preserves available footage but cannot reconstruct missing footage. HLS segment boundaries and connection timing mean starts/stops are not frame-exact; use the deterministic tests to characterize your source. Unnamed MP4 downloads use the original start timestamp in UTC: `YYYY-MM-DD_HH-MM-SS_UTC_shortid.mp4`. Named downloads use a sanitized title with `.mp4`; the media stored on disk retains its original internal name. Older unnamed records show a title derived from the original start time. The browser displays times in its local timezone. Compatible video/audio are remuxed to retain quality; incompatible media use H.264/AAC conversion.
 
 ## Storage
 
@@ -39,6 +47,8 @@ Default media cap: **100 GiB** (1 GiB = 1,073,741,824 bytes). The UI shows appli
 Cleanup removes the oldest unpinned Ready recordings, ordered by original start time. Pinned and in-use media are protected. Admission requires at least 16 MiB of headroom. Finalization reserves the larger of three times source media size or 16 MiB, to cover conversion growth. If safe headroom cannot be freed, capture stops or admission is refused with a storage error. Recoverable footage is preserved; insufficient space can prevent a final MP4. The minimum accepted cap is 1 MiB, but useful recording requires more than the reserve. Increase the cap/free disk space and inspect any preserved source media when an error occurs.
 
 ## API
+
+The [versioned API reference](docs/api.md) covers automation workflows and compatibility. The [GUI-to-API matrix](docs/gui-api-parity.md) maps each browser operation to its endpoint and permission. Interactive API docs run at `/api/v1/docs`; the checked OpenAPI contract is at `/api/v1/openapi.json`.
 
 Successful API routes use JSON except completed downloads. Errors return non-success HTTP status with a descriptive text body: invalid inputs 400, unknown ID 404, and busy/in-use/unavailable operations 409. Check the response before proceeding. Start conflicts never create a second session. Save the ID returned by Start so delayed calendar stops cannot stop a later recording.
 
@@ -51,8 +61,8 @@ RECORDER_URL=https://recorder.example.org
 # CF-Access-Client-Id: <secret client id>
 # CF-Access-Client-Secret: <secret client secret>
 
-# Start a one-hour capture (omit duration_seconds for manual capture).
-curl -fsS "$RECORDER_URL/api/recordings" -H 'Content-Type: application/json' -d '{"duration_seconds":3600}'
+# Start a named one-hour capture (omit duration_seconds for manual capture).
+curl -fsS "$RECORDER_URL/api/recordings" -H 'Content-Type: application/json' -d '{"title":"Town Hall","duration_seconds":3600}'
 # Poll active session and storage. Keep the returned recording ID.
 curl -fsS "$RECORDER_URL/api/status"
 # Retry-safe stop targets one ID; replace RECORDING_ID with the saved ID.
@@ -64,6 +74,8 @@ curl -fsS "$RECORDER_URL/api/recordings/RECORDING_ID"
 curl -fL "$RECORDER_URL/api/recordings/RECORDING_ID/download" -o recording.mp4
 # Pin/unpin: true/false.
 curl -fsS -X PATCH "$RECORDER_URL/api/recordings/RECORDING_ID" -H 'Content-Type: application/json' -d '{"pinned":true}'
+# Rename without changing the recording ID, capture timestamp, or media path.
+curl -fsS -X PATCH "$RECORDER_URL/api/recordings/RECORDING_ID" -H 'Content-Type: application/json' -d '{"title":"Updated Town Hall"}'
 # Explicit destructive delete, including pinned footage.
 curl -fsS -X DELETE "$RECORDER_URL/api/recordings/RECORDING_ID"
 # Current settings and a 100 GiB cap.
@@ -73,7 +85,7 @@ curl -fsS -X PUT "$RECORDER_URL/api/settings" -H 'Content-Type: application/json
 curl -fsS "$RECORDER_URL/health"
 ```
 
-Start accepts an optional positive numeric `duration_seconds`, up to one year. It returns a record containing `id`, `state`, `started_at`, `deadline`, `source_url`, `filename`, `pinned`, `progress`, `error`, and `interruptions`. Status returns `{active: record|null, storage: {media_bytes, cap_bytes, total_bytes, free_bytes}}`. History returns an array of records. Lifecycle states are `recording`, `reconnecting`, `recovering`, `processing`, `ready`, and `error`. Poll every few seconds until Ready or Error, rather than treating the stop response as a finished download. Power Automate handles calendar triggers externally; the recorder has no scheduler. Persist each calendar event's returned recording ID and target that ID when stopping. Protect service-token values using your automation platform's secret storage; do not commit tokens.
+Start accepts an optional positive numeric `duration_seconds`, up to one year, and optional `title` (1–200 characters after trimming; control and invisible characters rejected). `PATCH /api/recordings/{id}` accepts `{"title":"New title"}`, `{"pinned":true}`, or both. Duplicate titles are permitted. The returned record includes `title` and `filename` (the current download name), as well as `id`, `state`, `started_at`, `deadline`, `source_url`, `pinned`, `progress`, `error`, and `interruptions`. Filenames remove unsafe characters and never affect media paths. Download responses include a safe ASCII fallback and UTF-8 `filename*` for compatible clients. The same recording operations are available under `/api/v1`; old paths continue to work. Status returns `{active: record|null, storage: {media_bytes, cap_bytes, total_bytes, free_bytes}}`. History returns an array of records. Lifecycle states are `recording`, `reconnecting`, `recovering`, `processing`, `ready`, and `error`. Poll every few seconds until Ready or Error, rather than treating the stop response as a finished download. Power Automate handles calendar triggers externally; the recorder has no scheduler. Persist each calendar event's returned recording ID and target that ID when stopping. Protect service-token values using your automation platform's secret storage; do not commit tokens.
 
 ## Updates, rollback, and image publishing
 

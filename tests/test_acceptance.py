@@ -30,6 +30,8 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.media.mkdir()
         self.offline = False
         self.source_requests = []
+        self.webhook_fail = False
+        self.webhook_requests = []
         self.fixture_log = (self.root / 'fixture.log').open('wb')
         self.fixture = subprocess.Popen([
             'ffmpeg', '-hide_banner', '-loglevel', 'error', '-re',
@@ -54,6 +56,10 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
                 return web.Response(text=playlist, content_type='application/vnd.apple.mpegurl')
             return web.FileResponse(path, headers={'Access-Control-Allow-Origin': '*'})
         app = web.Application()
+        async def webhook(request):
+            self.webhook_requests.append((dict(request.headers), await request.read()))
+            return web.Response(status=503 if self.webhook_fail else 204)
+        app.router.add_post('/webhook', webhook)
         app.router.add_get('/{name}', serve)
         self.fixture_runner = web.AppRunner(app)
         await self.fixture_runner.setup()
@@ -175,6 +181,8 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         admin_headers = {'Authorization':'Bearer '+administrator['key']}
         operator_headers = {'Authorization':'Bearer '+operator['key']}
         _, settings = await self.request('GET', '/api/settings', headers=admin_headers)
+        _, versioned_settings = await self.request('GET', '/api/v1/settings', headers=admin_headers)
+        self.assertEqual(versioned_settings, settings)
         self.assertEqual(settings['source_url'], self.source)
         self.assertEqual(settings['storage_cap_bytes'], 100_000_000)
         self.assertNotIn('upgrade-fixture-token', str(settings))
@@ -187,15 +195,23 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('upgrade-oidc-secret', str(oidc))
         self.assertEqual((await self.request('PUT', '/api/settings', {}, check=False, headers=operator_headers))[0], 403)
         _, status = await self.request('GET', '/api/status', headers=operator_headers)
+        _, versioned_preview = await self.request('GET', '/api/v1/preview', headers=operator_headers)
+        self.assertEqual(versioned_preview['preview_url'], status['preview_url'])
         _, playlist = await self.request('GET', status['preview_url'], headers=operator_headers)
         self.assertIn(b'#EXTM3U', playlist)
         self.assertNotIn(b'upgrade-fixture', playlist)
         self.assertEqual((await self.request('GET', status['preview_url'], check=False))[0], 401)
+        self.assertEqual((await self.request('GET', '/api/v1/preview', check=False))[0], 401)
         # Persistent operator key and saved upstream credentials must still produce media.
         self.client.headers.update(operator_headers)
         recording = await self.capture(3)
         await self.request('PATCH', f"/api/recordings/{recording['id']}", {'pinned':True})
         await self.playable(recording)
+        _, versioned_media = await self.request('GET', f"/api/v1/recordings/{recording['id']}/download")
+        self.assertTrue(versioned_media.startswith(b'\x00\x00\x00'))
+        self.client.headers.clear()
+        self.assertEqual((await self.request('GET', f"/api/v1/recordings/{recording['id']}/download", check=False))[0], 401)
+        self.client.headers.update(operator_headers)
         self.assertEqual((await self.request('DELETE', f"/api/recordings/{recording['id']}", check=False))[0], 403)
         self.client.headers.clear()
         await self.request('POST', '/api/auth/login', {'username':'recovery-admin', 'password':'upgrade-fixture-password'})
@@ -237,6 +253,71 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
             '-f', 'null', '-'], capture_output=True)
         self.assertEqual(decode.returncode, 0, decode.stderr.decode())
         return metadata
+
+    async def test_title_on_start_and_rename_preserve_recording_and_playable_download(self):
+        _, started = await self.request('POST', '/api/recordings', {
+            'title': 'Morning / Meeting ☕', 'duration_seconds': 2,
+        })
+        first = await self.wait_terminal(started['id'])
+        self.assertEqual(first['state'], 'ready', first)
+        self.assertEqual(first['title'], 'Morning / Meeting ☕')
+        self.assertNotIn('/', first['filename'])
+        self.assertTrue(first['filename'].endswith('.mp4'))
+        await self.playable(first)
+        original = {key:first[key] for key in ('id', 'started_at', 'pinned')}
+        _, renamed = await self.request('PATCH', f"/api/recordings/{first['id']}", {
+            'title': 'Event: 漢字 🚀 / Part 2',
+        })
+        self.assertEqual(renamed['title'], 'Event: 漢字 🚀 / Part 2')
+        self.assertEqual({key:renamed[key] for key in original}, original)
+        self.assertNotIn('/', renamed['filename'])
+        async with self.client.get(self.base + f"/api/recordings/{first['id']}/download") as response:
+            self.assertEqual(response.status, 200)
+            disposition = response.headers['Content-Disposition']
+            self.assertIn("filename*=UTF-8''", disposition)
+            self.assertNotIn('\n', disposition)
+            self.assertGreater(len(await response.read()), 10000)
+        await self.playable(renamed)
+        await self.kill_server()
+        await self.start_server()
+        _, saved = await self.request('GET', f"/api/recordings/{first['id']}")
+        self.assertEqual(saved['title'], renamed['title'])
+        self.assertEqual(saved['filename'], renamed['filename'])
+        self.assertEqual({key:saved[key] for key in original}, original)
+        await self.playable(saved)
+
+    async def test_title_validation_duplicates_and_operator_permissions(self):
+        for bad in ('  ', '../\r\nunsafe', '\u202e', 'x' * 201, 17):
+            status, _ = await self.request('POST', '/api/recordings', {'title': bad}, check=False)
+            self.assertEqual(status, 400)
+        _, first = await self.request('POST', '/api/recordings', {'duration_seconds': 2})
+        first = await self.wait_terminal(first['id'])
+        self.assertEqual(first['state'], 'ready', first)
+        self.assertTrue(first['title'].startswith('Recording 20'))
+        original_filename = first['filename']
+        _, operator = await self.request('POST', '/api/auth/keys', {'label':'naming operator'})
+        await self.request('POST', '/api/auth/config', {'username':'admin', 'password':'correct horse battery staple', 'enabled':True})
+        headers = {'Authorization':'Bearer '+operator['key']}
+        _, renamed = await self.request('PATCH', f"/api/recordings/{first['id']}", {'title':'Identical'}, headers=headers)
+        self.assertEqual(renamed['title'], 'Identical')
+        self.assertEqual(renamed['started_at'], first['started_at'])
+        self.assertEqual(renamed['pinned'], first['pinned'])
+        self.assertNotEqual(renamed['filename'], original_filename)
+        _, long_name = await self.request('PATCH', f"/api/recordings/{first['id']}", {'title':'漢' * 100}, headers=headers)
+        self.assertLessEqual(len(long_name['filename'].encode('utf-8')), 180)
+        await self.request('PATCH', f"/api/recordings/{first['id']}", {'title':'Identical'}, headers=headers)
+        status, _ = await self.request('PATCH', f"/api/recordings/{first['id']}", {'title':'  '}, check=False, headers=headers)
+        self.assertEqual(status, 400)
+        status, _ = await self.request('PATCH', f"/api/recordings/{first['id']}", {'title':'X','pinned':'wrong'}, check=False, headers=headers)
+        self.assertEqual(status, 400)
+        _, unchanged = await self.request('GET', f"/api/recordings/{first['id']}", headers=headers)
+        self.assertEqual(unchanged['title'], 'Identical')
+        status, _ = await self.request('DELETE', f"/api/recordings/{first['id']}", check=False, headers=headers)
+        self.assertEqual(status, 403)
+        _, second = await self.request('POST', '/api/recordings', {'title':'Identical', 'duration_seconds':2}, headers=headers)
+        self.assertNotEqual(first['id'], second['id'])
+        self.assertEqual(second['title'], 'Identical')
+        self.assertEqual(second['filename'], renamed['filename'])
 
     async def test_recording_produces_one_playable_download(self):
         recording = await self.capture()
