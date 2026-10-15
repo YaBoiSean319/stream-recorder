@@ -34,9 +34,9 @@ jobs:
         run: python -m unittest discover -s tests -v
       - run: docker build -t stream-recorder:test .
       - name: Focused media acceptance inside built image
-        run: docker run --rm -v "$PWD/tests:/tests:ro" stream-recorder:test python -m unittest discover -s /tests -p test_acceptance.py -k test_recording_produces_one_playable_download -v
+        run: docker run --rm -v "$PWD/tests:/app/tests:ro" stream-recorder:test python -m unittest discover -s /app/tests -p test_acceptance.py -k test_recording_produces_one_playable_download -v
       - name: Acceptance tests inside built image
-        run: docker run --rm -v "$PWD/tests:/tests:ro" stream-recorder:test python -m unittest discover -s /tests -v
+        run: docker run --rm -v "$PWD/tests:/app/tests:ro" stream-recorder:test python -m unittest discover -s /app/tests -v
       - name: Docker Compose smoke test
         env:
           RECORDER_IMAGE: stream-recorder:test
