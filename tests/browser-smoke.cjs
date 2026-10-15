@@ -222,4 +222,19 @@ const { chromium } = require('playwright');
       await signIn.waitForURL('**/api/auth/oidc/login');
       await signIn.getByText('Identity provider unavailable; use local administrator sign-in').waitFor();
       await signIn.goto(base);
-      await signIn.lo
+      await signIn.locator('#login-username').fill('browser-admin');
+      await signIn.locator('#login-password').fill('browser-fixture-password');
+      await signIn.getByRole('button',{name:'Sign in',exact:true}).click();
+      await signIn.waitForFunction(() => accessState.role === 'admin');
+      await signIn.getByRole('link',{name:'Settings',exact:true}).click();
+      await signIn.locator('#admin-username').waitFor({state:'visible'});
+    } finally { await anonymous.close(); }
+    await snapshot(reopened,'mobile-authenticated-settings');
+    console.log('Browser preview, capture independence, stop, download, pin and deletion confirmation passed');
+  } catch (error) {
+    for (const context of browser.contexts()) {
+      for (const open of context.pages()) await snapshot(open,'failure').catch(()=>{});
+    }
+    throw error;
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exit(1); });
