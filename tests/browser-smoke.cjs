@@ -130,7 +130,7 @@ const { chromium } = require('playwright');
     const assetWrite = reopened.waitForResponse(response => response.url()===base+'/api/v1/branding/assets/light_logo' && response.request().method()==='PUT');
     await reopened.getByRole('button',{name:'Send request'}).click();
     assert.equal((await assetWrite).status(),200,'Try it sends binary image uploads with session permissions');
-    await operationSelect.selectOption(JSON.stringify(['delete','/api/v1/auth/keys/{id}']));
+    await operationSelect.selectOption(JSON.stringify(['DELETE','/api/v1/auth/keys/{id}']));
     await reopened.locator('#mutation-warning').filter({hasText:'DELETE:'}).waitFor();
     await reopened.locator('#path').fill('/api/v1/auth/keys/not-a-real-key');
     let deleteRequests = 0;
@@ -222,19 +222,4 @@ const { chromium } = require('playwright');
       await signIn.waitForURL('**/api/auth/oidc/login');
       await signIn.getByText('Identity provider unavailable; use local administrator sign-in').waitFor();
       await signIn.goto(base);
-      await signIn.locator('#login-username').fill('browser-admin');
-      await signIn.locator('#login-password').fill('browser-fixture-password');
-      await signIn.getByRole('button',{name:'Sign in',exact:true}).click();
-      await signIn.waitForFunction(() => accessState.role === 'admin');
-      await signIn.getByRole('link',{name:'Settings',exact:true}).click();
-      await signIn.locator('#admin-username').waitFor({state:'visible'});
-    } finally { await anonymous.close(); }
-    await snapshot(reopened,'mobile-authenticated-settings');
-    console.log('Browser preview, capture independence, stop, download, pin and deletion confirmation passed');
-  } catch (error) {
-    for (const context of browser.contexts()) {
-      for (const open of context.pages()) await snapshot(open,'failure').catch(()=>{});
-    }
-    throw error;
-  } finally { await browser.close(); }
-})().catch(error => { console.error(error); process.exit(1); });
+      await signIn.lo
