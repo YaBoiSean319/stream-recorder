@@ -3,6 +3,7 @@ import asyncio
 import io
 import json
 import sqlite3
+import time
 import unittest
 
 from PIL import Image
@@ -55,6 +56,29 @@ class UpgradeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         async with self.client.put(self.base + '/api/v1/branding/assets/dark_logo',
                                    data=image.getvalue(), headers={'Content-Type': 'image/png'}) as response:
             self.assertEqual(response.status, 200, await response.text())
+
+        first_viewer_config = await self.request('PUT', '/api/v1/viewers/config', {
+            'player_url': 'https://player-one.example/watch',
+            'allowed_origin': 'https://player-one.example',
+            'public_tracking_url': self.base,
+            'timezone': 'UTC', 'detail_retention_days': 1,
+            'history_retention_days': 3, 'enabled': True,
+        })
+        first_viewer_id = first_viewer_config[1]['configuration_id']
+        viewer_config = await self.request('PUT', '/api/v1/viewers/config', {
+            'player_url': 'https://player-two.example/watch',
+            'allowed_origin': 'https://player-two.example',
+        })
+        viewer_id = viewer_config[1]['configuration_id']
+        self.assertNotEqual(first_viewer_id, viewer_id)
+        viewer_reader = await self.request('POST', '/api/v1/auth/keys', {
+            'label': 'analytics reader', 'role': 'operator', 'permissions': ['viewers:read'],
+        })
+        viewer_report = await self.request('POST', '/api/v1/viewers/report', {
+            'browser_id': 'upgrade-browser-0001', 'tab_id': 'upgrade-tab-00000001', 'playing': True,
+        }, headers={'Origin': 'https://player-two.example',
+                   'X-Tracking-Key': viewer_config[1]['tracking_key']})
+        self.assertEqual(viewer_report[0], 202)
 
         self.webhook_fail = True
         _, destination = await self.request('POST', '/api/v1/webhooks', {
@@ -128,6 +152,13 @@ class UpgradeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         event_id = before['items'][0]['event_id']
         self.assertEqual(before['items'][0]['status'], 'pending')
 
+        # Stage a known old rollup for the previous player identity. Assertions
+        # after replacement use only versioned HTTP responses, as operators do.
+        old_hour = int((time.time() - 2 * 86400) // 3600 * 3600)
+        with sqlite3.connect(self.root / 'data' / 'state.sqlite') as db:
+            db.execute('INSERT OR REPLACE INTO viewer_rollups VALUES(?,?,?,?,?)',
+                       (old_hour, first_viewer_id, 7200.0, 3600.0, 4))
+
         await self.request('POST', '/api/auth/config', {
             'username': 'upgrade-admin', 'password': 'upgrade-fixture-password', 'enabled': True,
         })
@@ -174,6 +205,34 @@ class UpgradeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(oidc['admin_groups'], ['upgrade-admins'])
         self.assertTrue(oidc['client_secret_saved'])
         self.assertNotIn('upgrade-oidc-secret', str(oidc))
+
+        reader_headers = {'Authorization': 'Bearer ' + viewer_reader[1]['key']}
+        _, restored_viewer_config = await self.request('GET', '/api/v1/viewers/config', headers=admin_headers)
+        self.assertEqual(restored_viewer_config['configuration_id'], viewer_id)
+        self.assertEqual(restored_viewer_config['detail_retention_days'], 1)
+        self.assertEqual(restored_viewer_config['history_retention_days'], 3)
+        self.assertNotIn('tracking_key', restored_viewer_config)
+        _, known_configs = await self.request('GET', '/api/v1/viewers/configurations', headers=reader_headers)
+        self.assertEqual({item['id'] for item in known_configs['items']} & {first_viewer_id, viewer_id},
+                         {first_viewer_id, viewer_id})
+        self.assertEqual((await self.request('GET', '/api/v1/viewers/config', check=False,
+                                             headers=reader_headers))[0], 403)
+        _, live = await self.request('GET', '/api/v1/viewers/live', headers=reader_headers)
+        self.assertEqual(live['count'], 1)
+        self.assertIn(live['collector_health'], ('healthy', 'unavailable'))
+        self.assertIsNotNone(live['last_report_at'],
+                             'Player contact and collector health are separate signals across replacement')
+        _, diagnostics = await self.request('GET', '/api/v1/viewers/diagnostics', headers=admin_headers)
+        self.assertEqual(diagnostics['collector_health'], live['collector_health'])
+        self.assertEqual(bool(diagnostics['last_sample_at']), live['collector_health'] == 'healthy')
+        history_query = (f'from={old_hour}&to={old_hour + 3600}&resolution=1h&timezone=UTC'
+                         f'&configuration_id={first_viewer_id}')
+        _, old_history = await self.request('GET', '/api/v1/viewers/history?' + history_query,
+                                            headers=reader_headers)
+        self.assertEqual(old_history['configuration_id'], first_viewer_id)
+        self.assertEqual(old_history['precision'], 'hourly-rollup')
+        self.assertEqual(old_history['statistics']['average'], 2.0)
+        self.assertEqual(old_history['statistics']['peak'], 4)
 
         deliveries = {'items': []}
         for _ in range(120):

@@ -55,8 +55,9 @@ The API is the supported automation surface for server state. Paths in the matri
 
 | GUI operation | API operation | Permission | Effect / boundary |
 | --- | --- | --- | --- |
-| View live audience or historical timeline/statistics | `GET /api/v1/viewers/live`; `GET /api/v1/viewers/history` | `viewers:read` | Operators and Administrators; historical ranges are bounded to 90 days and unknown collection time stays uncovered. |
-| Configure external player tracking | `GET/PUT /api/v1/viewers/config`; `POST /api/v1/viewers/key/rotate` | `viewers:manage` | Administrator only; configuration and key lifecycle stay separate from analytics reads. |
+| View live audience, timeline, statistics, daily peaks, day/hour heatmap, or Recording context | `GET /api/v1/viewers/live`; `GET /api/v1/viewers/history`; `GET /api/v1/viewers/configurations` | `viewers:read` | Operators and Administrators; reports include per-period coverage, selectable local-time heatmap periods, and capture windows; range is bounded by configured retention (maximum 730 days). Optional `timezone` preserves report grouping context. |
+| Export the selected viewer analytics range | `GET /api/v1/viewers/export.csv` | `viewers:export` | Operators and Administrators; preserves selected range, configuration, timezone and resolution. CSV includes coverage and gap rows and does not contain tracking secrets or browser/tab identifiers. |
+| Configure external player tracking, inspect diagnostics, or rotate/revoke key | `GET/PUT /api/v1/viewers/config`; `GET /api/v1/viewers/diagnostics`; `POST /api/v1/viewers/key/rotate`; `DELETE /api/v1/viewers/key` | `viewers:manage` | Administrator only; configuration reads never reveal key material; rotation returns replacement once and DELETE revokes without readback. |
 
 ## Permission model
 

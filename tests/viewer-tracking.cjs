@@ -23,8 +23,10 @@ module.exports = async function(browser, page, base, previewUrl) {
   }
   const first=await player(), second=await player();
   await first.locator('video').evaluate(v=>v.play());
+  assert.equal(await first.locator('video').evaluate(v=>v.muted),true,'Muted playback is included');
   await second.locator('video').evaluate(v=>v.play());
   await first.waitForFunction(async url=>(await (await fetch(url)).json()).count===1,base+'/api/v1/viewers/live',{timeout:15000});
+  await page.waitForFunction(()=>document.querySelector('#viewer-count')?.textContent==='1',null,{timeout:5000});
   await first.waitForFunction(()=>document.querySelector('video').currentTime>1,null,{timeout:15000});
   await first.locator('video').evaluate(v=>v.pause());
   await second.waitForTimeout(800);
@@ -32,6 +34,13 @@ module.exports = async function(browser, page, base, previewUrl) {
   await second.locator('video').evaluate(v=>{v.dispatchEvent(new Event('stalled'))});
   await first.waitForFunction(async url=>(await (await fetch(url)).json()).count===0,base+'/api/v1/viewers/live',{timeout:5000});
   await first.close(); await second.close();
+  const endedTab=await player();
+  await endedTab.locator('video').evaluate(v=>v.play());
+  await endedTab.waitForFunction(async url=>(await (await fetch(url)).json()).count===1,base+'/api/v1/viewers/live',{timeout:15000});
+  await endedTab.locator('video').evaluate(v=>{if(Number.isFinite(v.duration))v.currentTime=Math.max(0,v.duration-.2)});
+  await endedTab.locator('video').evaluate(v=>v.play());
+  await endedTab.waitForFunction(async url=>(await (await fetch(url)).json()).count===0,base+'/api/v1/viewers/live',{timeout:10000});
+  await endedTab.close();
   const rotated=await (await page.request.post(base+'/api/v1/viewers/key/rotate',{data:{}})).json();
   const oldKey=await page.request.post(base+'/api/v1/viewers/report',{headers:{Origin:origin,'X-Tracking-Key':settings.tracking_key},data:{browser_id:'browser-id-123456','tab_id':'tab-id-123456789','playing':true}});
   assert.equal(oldKey.status(),401,'Rotating key must revoke previous player snippets');

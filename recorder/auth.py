@@ -17,6 +17,7 @@ OPERATOR_PERMISSIONS = frozenset({
     'recordings:stop', 'recordings:download', 'recordings:pin', 'recordings:title',
     'uploads:read', 'uploads:create', 'uploads:retry', 'uploads:cancel',
     'viewers:read',
+    'viewers:export',
 })
 ADMIN_PERMISSIONS = OPERATOR_PERMISSIONS | frozenset({
     'settings:read', 'settings:write', 'recordings:delete', 'auth:manage',
@@ -43,6 +44,10 @@ def operation(request):
         return 'auth:public'
     if path in {'/viewers/live', '/viewers/history'}:
         return 'viewers:read'
+    if path == '/viewers/configurations':
+        return 'viewers:read'
+    if path == '/viewers/export.csv':
+        return 'viewers:export'
     if path.startswith('/viewers/'):
         return 'viewers:manage'
     if path == '/recordings':

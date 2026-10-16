@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 
 module.exports = async function(browser,page,base) {
   const end=Date.now()/1000,start=end-3600;
@@ -10,11 +11,24 @@ module.exports = async function(browser,page,base) {
   assert.ok(contract.coverage_percent>=0&&contract.coverage_percent<=100);
   await page.getByRole('link',{name:'Viewer analytics',exact:true}).click();
   await page.locator('#analytics-screen').waitFor({state:'visible'});
+  await page.locator('#resolution-filter').selectOption('5m');
+  await page.waitForFunction(()=>document.querySelector('#timeline-status').textContent!=='Loading history…');
   await page.locator('#timeline-status').waitFor();
   await page.getByRole('button',{name:'Peak',exact:true}).click();
   assert.equal(await page.locator('#metric-peak').getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'24 hours'}).click();
   await page.waitForFunction(()=>document.querySelector('#timeline-status').textContent!=='Loading history…');
+  await page.locator('#daily-peaks table').waitFor();
+  await page.locator('#viewer-heatmap table').waitFor();
+  const activityCell=page.locator('.heat-cell').first();
+  await activityCell.focus();
+  await page.keyboard.press('Enter');
+  assert.ok((await page.locator('#heatmap-periods').textContent()).includes('periods'),'Heatmap selection lists actual represented date/time periods');
+  const period=page.locator('#heatmap-periods button').first();
+  await period.focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('#timeline-status').textContent!=='Loading history…');
+  assert.ok((await page.locator('#timeline-coverage').textContent()).includes('coverage'));
   const chart=page.locator('#viewer-chart');
   const box=await chart.boundingBox();
   await page.mouse.move(box.x+box.width*.2,box.y+box.height*.65);
@@ -31,6 +45,19 @@ module.exports = async function(browser,page,base) {
   await chart.focus();
   await page.keyboard.press('ArrowRight');
   assert.ok(await page.locator('#viewer-chart').getAttribute('aria-label'));
+  const exportDownload=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Export CSV',exact:true}).click();
+  const download=await exportDownload;
+  assert.equal(download.suggestedFilename(),'viewer-analytics.csv');
+  const csvPath=await download.path(),csv=fs.readFileSync(csvPath,'utf8');
+  assert.match(csv,/row_type,name,timestamp_unix_seconds,timezone/);
+  assert.match(csv,/statistic,viewer_hours/);
+  assert.doesNotMatch(csv,/browser_id|tab_id|tracking_key/);
+  await page.getByRole('link',{name:'Settings',exact:true}).click();
+  await page.locator('#viewer-detail-retention').waitFor({state:'visible'});
+  assert.equal(await page.locator('#viewer-detail-retention').inputValue(),'90');
+  assert.equal(await page.locator('#viewer-history-retention').inputValue(),'730');
+  assert.match(await page.locator('#timeline-coverage').textContent(),/resolution/);
   await page.getByRole('link',{name:'Recorder',exact:true}).click();
   await page.locator('.workspace').waitFor({state:'visible'});
 };

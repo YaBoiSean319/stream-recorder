@@ -1,7 +1,7 @@
 'use strict';
 (() => {
  const $=id=>document.getElementById(id), svg=$('viewer-chart');
- let rangeMs=3600000, metric='average', lastData=null, refreshTimer=null, startX=null, zoom=null, explicitRange=null, pointIndex=0;
+ let rangeMs=3600000, metric='average', lastData=null, refreshTimer=null, startX=null, zoom=null, explicitRange=null, pointIndex=0, configurationOverride=null;
  const presets={ '1h':3600000,'24h':86400000,'7d':604800000,'30d':2592000000 };
  const api=async(url)=>{const r=await recorderFetch(url);let d;try{d=await r.json();}catch(_){d={};}if(!r.ok)throw Error(d.error?.message||'Could not load viewer history');return d;};
  const fmtDate=(seconds,tz)=>new Intl.DateTimeFormat(undefined,{timeZone:tz,dateStyle:'short',timeStyle:'short'}).format(new Date(seconds*1000));
@@ -12,7 +12,10 @@
   clearTimeout(refreshTimer);
   const end=explicitRange?.end||Date.now()/1000,start=explicitRange?.start||end-rangeMs;
   const params=new URLSearchParams({from:String(start),to:String(end)});
-  const configuration=$('configuration-filter').value;if(configuration)params.set('configuration_id',configuration);
+  params.set('resolution',$('resolution-filter').value||'auto');
+  const context=new URLSearchParams(location.hash.split('?')[1]||'');
+  const configuration=configurationOverride!==null?configurationOverride:($('configuration-filter').value||context.get('configuration_id'));if(configuration)params.set('configuration_id',configuration);
+  if(context.get('timezone'))params.set('timezone',context.get('timezone'));
   $('timeline-status').textContent='Loading history…';
   try{
    const data=await api('/api/v1/viewers/history?'+params);lastData=data;
@@ -22,14 +25,25 @@
    $('history-peak').textContent=data.statistics.peak==null?'—':String(data.statistics.peak);
    $('history-average').textContent=data.statistics.average==null?'—':data.statistics.average.toFixed(2);
    $('history-hours').textContent=data.statistics.viewer_hours.toFixed(3);
-   $('timeline-coverage').textContent=`${data.coverage_percent.toFixed(1)}% coverage · ${Math.round(data.coverage_seconds)} seconds known · ${Math.round(data.resolution_seconds)} second resolution. Unknown intervals are excluded.`;
+   $('timeline-coverage').textContent=`${data.coverage_percent.toFixed(1)}% coverage · ${Math.round(data.coverage_seconds)} seconds known · ${Math.round(data.resolution_seconds)} second resolution${data.detail_expired?' · detailed samples expired':''}${data.history_expired?' · history retention expired':''}${data.partial_rollup_hours_excluded?` · ${data.partial_rollup_hours_excluded} partial hourly bucket(s) omitted`:''}. Unknown intervals are excluded.`;
    $('timeline-status').textContent=data.coverage_seconds?'':'No known collection samples in this range.';
    const select=$('configuration-filter'),selected=select.value;
    const options=['<option value="">Current player configuration</option>',...data.configurations.map((c,i)=>`<option value="${c.id}">Configuration ${data.configurations.length-i} · ${fmtDate(c.first_at,data.timezone)}</option>`)];
-   const signature=options.join('');if(select.dataset.options!==signature){select.innerHTML=signature;select.dataset.options=signature;select.value=selected;}
-   draw();
+   const signature=options.join('');if(select.dataset.options!==signature){select.innerHTML=signature;select.dataset.options=signature;select.value=selected||context.get('configuration_id')||'';}
+   renderActivity(data);
   }catch(e){$('timeline-status').textContent=e.message;svg.replaceChildren();}
   if(!$('analytics-screen').hidden)refreshTimer=setTimeout(loadViewerHistory,120000);
+ }
+ async function exportViewerHistory(){
+  const end=explicitRange?.end||Date.now()/1000,start=explicitRange?.start||end-rangeMs;
+  const params=new URLSearchParams({from:String(start),to:String(end)}),context=new URLSearchParams(location.hash.split('?')[1]||'');
+  params.set('resolution',$('resolution-filter').value||'auto');
+  const configuration=configurationOverride!==null?configurationOverride:($('configuration-filter').value||context.get('configuration_id'));
+  if(configuration)params.set('configuration_id',configuration);
+  if(context.get('timezone'))params.set('timezone',context.get('timezone'));
+  const response=await recorderFetch('/api/v1/viewers/export.csv?'+params);
+  if(!response.ok){let message='Could not export viewer analytics';try{message=(await response.json()).error?.message||message;}catch(_){}$('timeline-status').textContent=message;return;}
+  const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='viewer-analytics.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  function draw(){
   if(!lastData)return;
@@ -40,6 +54,7 @@
   function el(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));svg.append(n);return n;}
   for(let i=0;i<=4;i++){const y=T+innerH*i/4;el('line',{x1:L,y1:y,x2:W-R,y2:y,class:'chart-grid'});const label=el('text',{x:L-8,y:y+4,'text-anchor':'end',class:'chart-axis'});label.textContent=String(Math.round(max*(4-i)/4));}
   const x=p=>L+(p.timestamp-minT)/(maxT-minT)*innerW, y=p=>T+innerH-(Number(p[metric])/max)*innerH;
+  for(const recording of lastData.recordings||[]){if(recording.end==null)continue;const left=Math.max(minT,recording.start),right=Math.min(maxT,recording.end);if(right<=left)continue;const shade=el('rect',{x:x({timestamp:left}),y:T,width:Math.max(2,x({timestamp:right})-x({timestamp:left})),height:innerH,class:'capture-overlay'});const title=el('title');title.textContent=`Recording capture: ${recording.title}${recording.interruption_count?`; ${recording.interruption_count} interruption(s)`:''}`;shade.append(title);}
   let segment=[];const segments=[];
   for(const p of points){if(p.covered_seconds>0&&p.complete)segment.push(p);else{if(segment.length){segments.push(segment);segment=[];}if(p.covered_seconds>0)segments.push([p]);}}
   if(segment.length)segments.push(segment);
@@ -52,13 +67,26 @@
   pointIndex=Math.min(pointIndex,Math.max(0,points.length-1));
  }
  function showPoint(i){const p=lastData?.points[i];if(!p)return;pointIndex=i;$('timeline-hover').textContent=p.covered_seconds?`${fmtDate(p.timestamp,lastData.timezone)} · average ${p.average.toFixed(2)} · peak ${p.peak} · ${Math.round(p.covered_seconds)} seconds covered`:`${fmtDate(p.timestamp,lastData.timezone)} · no data` ;}
+ const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+ function renderActivity(data){
+  const daily=$('daily-peaks'), heat=$('viewer-heatmap'), periods=$('heatmap-periods'),windows=$('recording-windows');
+  daily.replaceChildren();const dailyTable=document.createElement('table');dailyTable.className='analytics-data';dailyTable.innerHTML='<thead><tr><th scope="col">Reporting date</th><th scope="col">Peak browsers</th><th scope="col">Peak time</th><th scope="col">Coverage</th></tr></thead>';
+  const dailyBody=document.createElement('tbody');for(const day of data.daily_peaks){const row=document.createElement('tr');for(const value of [day.date,day.peak==null?'—':String(day.peak),day.peak_at==null?'—':fmtDate(day.peak_at,data.timezone),`${day.coverage_percent.toFixed(1)}% (${Math.round(day.covered_seconds)} / ${Math.round(day.expected_seconds)} sec)`]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}dailyBody.append(row);}dailyTable.append(dailyBody);daily.append(dailyTable);
+  heat.replaceChildren();const table=document.createElement('table');table.className='heatmap-table';const head=document.createElement('thead'),headRow=document.createElement('tr');const dayHeading=document.createElement('th');dayHeading.scope='col';dayHeading.textContent='Day';headRow.append(dayHeading);for(let h=0;h<24;h++){const th=document.createElement('th');th.scope='col';th.textContent=String(h).padStart(2,'0');headRow.append(th);}head.append(headRow);table.append(head);
+  const byKey=new Map(data.heatmap.map(cell=>[`${cell.day_of_week}:${cell.hour}`,cell])),max=Math.max(1,...data.heatmap.map(cell=>cell.peak));const body=document.createElement('tbody');
+  for(let day=0;day<7;day++){const row=document.createElement('tr'),label=document.createElement('th');label.scope='row';label.textContent=days[day];row.append(label);for(let hour=0;hour<24;hour++){const td=document.createElement('td'),cell=byKey.get(`${day}:${hour}`);if(cell){const button=document.createElement('button');button.type='button';button.className='heat-cell';button.textContent=cell.peak==null?'—':String(cell.peak);button.style.setProperty('--heat',String(cell.peak==null ? .12 : .12+.78*cell.peak/max));button.setAttribute('aria-label',`${days[day]} ${String(hour).padStart(2,'0')}:00, ${cell.peak==null?'no covered peak':`peak ${cell.peak} browsers`}, ${cell.period_count} represented periods, ${Math.round(cell.covered_seconds)} of ${Math.round(cell.expected_seconds)} seconds covered`);button.title=`${cell.peak==null?'No covered samples':`Peak ${cell.peak} browsers`} · ${cell.period_count} date/time periods · ${Math.round(cell.covered_seconds)} / ${Math.round(cell.expected_seconds)} seconds covered`;button.onclick=()=>showPeriods(cell);td.append(button);}else{td.textContent='—';td.className='no-data';}row.append(td);}body.append(row);}table.append(body);heat.append(table);
+  periods.replaceChildren();windows.replaceChildren();for(const rec of data.recordings){if(rec.end==null||rec.end<=rec.start)continue;const link=document.createElement('button');link.type='button';link.className='recording-window-link';link.textContent=`${rec.title} · ${fmtDate(rec.start,data.timezone)} – ${fmtDate(rec.end,data.timezone)}${rec.interruption_count?` · ${rec.interruption_count} interruption(s)`:''}`;link.setAttribute('aria-label',`Open analytics for recording ${rec.title}`);link.onclick=()=>setRange(rec.start*1000,rec.end*1000);windows.append(link);}draw();
+ }
+ function showPeriods(cell){const box=$('heatmap-periods');box.replaceChildren();const heading=document.createElement('p');heading.className='muted';heading.textContent=`${days[cell.day_of_week]} ${String(cell.hour).padStart(2,'0')}:00 periods. Choose one actual date/time period; each button opens only that period.`;box.append(heading);for(const period of cell.periods){const button=document.createElement('button');button.type='button';button.className='period-button';const offset=period.utc_offset_seconds===0?'UTC':`UTC${period.utc_offset_seconds<0?'−':'+'}${String(Math.floor(Math.abs(period.utc_offset_seconds)/3600)).padStart(2,'0')}:${String(Math.floor(Math.abs(period.utc_offset_seconds)%3600/60)).padStart(2,'0')}`,peak=period.peak==null?'no covered peak':`peak ${period.peak}`;button.textContent=`${period.date} ${String(period.hour).padStart(2,'0')}:00 ${offset} · ${peak} · ${period.coverage_percent.toFixed(0)}% coverage`;button.setAttribute('aria-label',`Open ${period.date} ${String(period.hour).padStart(2,'0')}:00 ${offset}, ${peak}${period.peak==null?'': ' browsers'}`);button.onclick=()=>setRange(period.from*1000,period.to*1000);box.append(button);}}
  document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{rangeMs=presets[button.dataset.range];zoom=null;explicitRange=null;loadViewerHistory();}));
  $('range-apply').addEventListener('click',()=>{const zone=lastData?.timezone||'UTC';let a,b;try{a=wallTime($('range-start').value,zone);b=wallTime($('range-end').value,zone);}catch(_){a=NaN;b=NaN;}if(!Number.isFinite(a)||!Number.isFinite(b)||a>=b){$('timeline-status').textContent='Choose a valid increasing custom range in the reporting timezone.';return;}setRange(a,b);});
  $('metric-average').addEventListener('click',()=>{metric='average';$('metric-average').setAttribute('aria-pressed','true');$('metric-peak').setAttribute('aria-pressed','false');draw();});
  $('metric-peak').addEventListener('click',()=>{metric='peak';$('metric-average').setAttribute('aria-pressed','false');$('metric-peak').setAttribute('aria-pressed','true');draw();});
  $('zoom-reset').addEventListener('click',()=>{zoom=null;explicitRange=null;loadViewerHistory();});
- $('configuration-filter').addEventListener('change',loadViewerHistory);
+ $('configuration-filter').addEventListener('change',()=>{configurationOverride=$('configuration-filter').value;loadViewerHistory();});
+ $('resolution-filter').addEventListener('change',loadViewerHistory);
+ $('viewer-export').addEventListener('click',()=>exportViewerHistory());
  window.loadViewerHistory=loadViewerHistory;
- window.addEventListener('hashchange',()=>{if(location.hash==='#analytics')loadViewerHistory();else clearTimeout(refreshTimer);});
- if(location.hash==='#analytics')loadViewerHistory();
+ window.addEventListener('hashchange',()=>{if(location.hash.startsWith('#analytics')){const context=new URLSearchParams(location.hash.split('?')[1]||'');const from=Number(context.get('from')),to=Number(context.get('to'));if(from>0&&to>from){explicitRange={start:from,end:to};rangeMs=(to-from)*1000;}loadViewerHistory();}else clearTimeout(refreshTimer);});
+ if(location.hash.startsWith('#analytics')){const context=new URLSearchParams(location.hash.split('?')[1]||'');const from=Number(context.get('from')),to=Number(context.get('to'));if(from>0&&to>from){explicitRange={start:from,end:to};rangeMs=(to-from)*1000;}loadViewerHistory();}
 })();

@@ -213,6 +213,9 @@ class Recorder:
             if self.closing:
                 return
             r['state'] = 'processing'
+            # Capture analytics end at the actual transition out of HLS capture,
+            # before MP4 processing time is included in the recording window.
+            r['ended_at'] = stamp()
             r['stop_requested'] = True
             self.save(r)
             await self.finalize(r, folder)
@@ -221,6 +224,7 @@ class Recorder:
         except Exception as exc:
             await self.terminate()
             r['state'] = 'error'
+            r.setdefault('ended_at', stamp())
             r['error'] = str(exc)
             self.save(r)
         finally:

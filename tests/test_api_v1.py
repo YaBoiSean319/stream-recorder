@@ -123,9 +123,14 @@ class VersionedApiTests(unittest.IsolatedAsyncioTestCase):
         saved = json.loads((APP_ROOT/'docs'/'openapi.json').read_text())
         self.assertEqual(document, saved)
         for path, verb in [('/api/v1/status','get'),('/api/v1/recordings','post'),
-                           ('/api/v1/recordings/{id}/download','get'),('/api/v1/auth/keys','post')]:
+                           ('/api/v1/recordings/{id}/download','get'),('/api/v1/auth/keys','post'),
+                           ('/api/v1/viewers/export.csv','get'),('/api/v1/viewers/configurations','get'),
+                           ('/api/v1/viewers/diagnostics','get'),('/api/v1/viewers/key','delete')]:
             self.assertIn(verb, document['paths'][path])
             self.assertIn('x-permission', document['paths'][path][verb])
+        self.assertEqual(document['paths']['/api/v1/viewers/export.csv']['get']['x-permission'],'viewers:export')
+        self.assertIn('ViewerHistory',document['components']['schemas'])
+        self.assertIn('ViewerConfigurationUpdate',document['components']['schemas'])
         self.assertEqual((await self.client.get('/api/v1/docs')).status, 200)
         self.assertEqual((await self.client.get('/api/v1/openapi.json')).status, 200)
         js = await (await self.client.get('/static/api-docs.js')).text()
@@ -137,8 +142,9 @@ class VersionedApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('type=\"password\"', html)
         self.assertIn('Google consent still requires', html)
         api_guide = (APP_ROOT/'docs'/'api.md').read_text()
-        for term in ['Power Automate', 'n8n', 'browser-local', 'uncertain', 'Idempotency-Key']:
+        for term in ['Power Automate', 'n8n', 'browser-local', 'uncertain', 'Idempotency-Key', 'viewers:export']:
             self.assertIn(term.lower(), api_guide.lower())
+        self.assertIn('viewer-analytics.csv',(APP_ROOT/'docs'/'viewer-analytics.md').read_text())
         self.assertIn('YouTube Data API v3', (APP_ROOT/'docs'/'youtube.md').read_text())
         self.assertIn('HMAC-SHA256', (APP_ROOT/'docs'/'webhooks.md').read_text())
         await self.client.post('/api/v1/auth/config', json={

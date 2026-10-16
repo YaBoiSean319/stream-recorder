@@ -1,5 +1,6 @@
 """External-player tracking contract at public HTTP seam."""
 import asyncio, tempfile, unittest
+from unittest.mock import patch
 from aiohttp.test_utils import TestClient, TestServer
 from recorder.server import create_app
 
@@ -44,6 +45,46 @@ class ViewerTrackingHttpTests(unittest.IsolatedAsyncioTestCase):
         old=await self.client.post('/api/v1/viewers/report',json=payload,headers={'Origin':'https://player.example','X-Tracking-Key':config['tracking_key']}); self.assertEqual(old.status,401)
         denied=await self.client.post('/api/v1/viewers/key/rotate',json={},headers={'Authorization':'Bearer '+op['key']})
         self.assertEqual(denied.status,403)
+
+    async def test_ingestion_rate_limit_is_sixty_reports_per_client_per_minute(self):
+        config=await (await self.client.put('/api/v1/viewers/config',json={
+            'player_url':'https://player.example/watch','allowed_origin':'https://player.example',
+            'public_tracking_url':'https://recorder.example','timezone':'UTC','enabled':True
+        })).json()
+        headers={'Origin':'https://player.example','X-Tracking-Key':config['tracking_key']}
+        payload={'browser_id':'browser-id-123456','tab_id':'tab-id-123456789','playing':True}
+        with patch('recorder.viewers.time.time', return_value=1_800_000_000):
+            statuses=[]
+            for _ in range(61):
+                response=await self.client.post('/api/v1/viewers/report',headers=headers,json=payload)
+                statuses.append(response.status)
+        self.assertEqual(statuses[:60],[202]*60)
+        self.assertEqual(statuses[60],429)
+
+    async def test_ingestion_rejects_oversized_reports_before_recording_activity(self):
+        config=await (await self.client.put('/api/v1/viewers/config',json={
+            'player_url':'https://player.example/watch','allowed_origin':'https://player.example',
+            'public_tracking_url':'https://recorder.example','timezone':'UTC','enabled':True
+        })).json()
+        headers={'Origin':'https://player.example','X-Tracking-Key':config['tracking_key']}
+        response=await self.client.post('/api/v1/viewers/report',headers=headers,
+            data='{"browser_id":"browser-id-123456","tab_id":"tab-id-123456789","playing":true,"padding":"'+'x'*4096+'"}')
+        self.assertEqual(response.status,413)
+        live=await (await self.client.get('/api/v1/viewers/live')).json()
+        self.assertEqual(live['count'],0)
+
+    async def test_ingestion_returns_bad_request_for_malformed_json(self):
+        config=await (await self.client.put('/api/v1/viewers/config',json={
+            'player_url':'https://player.example/watch','allowed_origin':'https://player.example',
+            'public_tracking_url':'https://recorder.example','timezone':'UTC','enabled':True
+        })).json()
+        response=await self.client.post('/api/v1/viewers/report',
+            headers={'Origin':'https://player.example','X-Tracking-Key':config['tracking_key']},
+            data=b'{"browser_id":')
+        self.assertEqual(response.status,400)
+        error=await response.json()
+        self.assertEqual(error['error']['code'],'invalid_request')
+        self.assertEqual(error['error']['message'],'Expected a valid JSON report')
     async def test_disabled_collection_is_distinct_from_healthy_zero(self):
         disabled=await (await self.client.get('/api/v1/viewers/live')).json()
         self.assertEqual(disabled['state'],'disabled'); self.assertIsNone(disabled['count'])
