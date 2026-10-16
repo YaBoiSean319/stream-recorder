@@ -26,7 +26,7 @@ module.exports = async function(browser, page, base, previewUrl) {
   assert.equal(await first.locator('video').evaluate(v=>v.muted),true,'Muted playback is included');
   await second.locator('video').evaluate(v=>v.play());
   await first.waitForFunction(async url=>(await (await fetch(url)).json()).count===1,base+'/api/v1/viewers/live',{timeout:15000});
-  await page.reload();
+  await page.evaluate(()=>window.refreshViewerLive());
   await page.waitForFunction(()=>document.querySelector('#viewer-count')?.textContent==='1',null,{timeout:5000});
   await first.waitForFunction(()=>document.querySelector('video').currentTime>1,null,{timeout:15000});
   await first.locator('video').evaluate(v=>v.pause());
