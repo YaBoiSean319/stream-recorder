@@ -1572,7 +1572,7 @@
         "operationId": "putBrandingAsset",
         "summary": "Upload or replace one shared image",
         "x-permission": "branding:write",
-        "description": "Raw PNG, JPEG, or WebP. Logos ≤2 MiB, ≤2048 px and ≤4 million pixels. Favicon ≤512 KiB and ≤512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
+        "description": "Raw PNG, JPEG, or WebP. Logos \u22642 MiB, \u22642048 px and \u22644 million pixels. Favicon \u2264512 KiB and \u2264512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
         "requestBody": {
           "required": true,
           "description": "Raw decoded image input; file picker in the interactive docs sends the selected PNG, JPEG, or WebP bytes.",
@@ -2709,6 +2709,114 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/live": {
+      "get": {
+        "operationId": "viewerLive",
+        "summary": "Live viewer status",
+        "x-permission": "viewers:read",
+        "responses": {
+          "200": {
+            "description": "Current anonymous browser count, or disabled state"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/config": {
+      "get": {
+        "operationId": "viewerConfigRead",
+        "summary": "Read external-player tracking configuration",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Configuration; tracking secret is never returned"
+          }
+        }
+      },
+      "put": {
+        "operationId": "viewerConfigWrite",
+        "summary": "Configure external-player tracking",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Updated configuration and one-time generated key/snippet"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/key/rotate": {
+      "post": {
+        "operationId": "viewerKeyRotate",
+        "summary": "Revoke old tracking key and generate a replacement",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "One-time key and generated player snippet"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/report": {
+      "options": {
+        "operationId": "viewerReportPreflight",
+        "summary": "Preflight anonymous playback report",
+        "x-permission": "public",
+        "responses": {
+          "204": {
+            "description": "CORS preflight accepted for the configured player origin"
+          }
+        }
+      },
+      "post": {
+        "operationId": "viewerReport",
+        "summary": "Report anonymous playback presence",
+        "x-permission": "public tracking key and allowed Origin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "browser_id",
+                  "tab_id",
+                  "playing"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "browser_id": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 80
+                  },
+                  "tab_id": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 80
+                  },
+                  "playing": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Report accepted"
+          },
+          "401": {
+            "description": "Missing, invalid, or revoked key"
+          },
+          "403": {
+            "description": "Disallowed origin"
+          },
+          "429": {
+            "description": "Rate or active-session limit"
           }
         }
       }

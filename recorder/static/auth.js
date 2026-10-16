@@ -70,6 +70,7 @@ async function initializeAccess() {
  if(accessState.enabled&&!accessState.role){buildSignIn();return accessState;}
  if(accessState.role!=='admin'){
   document.getElementById('settings-form').hidden=true;
+  document.getElementById('viewer-settings').hidden=true;
   section.append(node('p','Shared settings and access management require administrator permission.'));
   return accessState;
  }

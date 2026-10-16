@@ -339,6 +339,8 @@ def create_app(path=None):
     app[web.AppKey('recorder', Recorder)] = service
     from recorder.branding import install as install_branding
     install_branding(app, service)
+    from recorder.viewers import install as install_viewers
+    install_viewers(app, service)
 
     async def api(request):
         try:
