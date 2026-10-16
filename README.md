@@ -48,7 +48,7 @@ Cleanup removes the oldest unpinned Ready recordings, ordered by original start 
 
 ## API
 
-The [versioned API reference](docs/api.md) covers automation workflows and compatibility. The [GUI-to-API matrix](docs/gui-api-parity.md) maps each browser operation to its endpoint and permission. Interactive API docs run at `/api/v1/docs`; the checked OpenAPI contract is at `/api/v1/openapi.json`.
+The [versioned API reference](docs/api.md) covers automation workflows and compatibility. The [external player viewer tracking guide](docs/viewer-analytics.md) covers anonymous live counts, the interactive historical timeline and range statistics, API permissions, and the narrowly scoped gateway setup. The [GUI-to-API matrix](docs/gui-api-parity.md) maps each browser operation to its endpoint and permission. Interactive API docs run at `/api/v1/docs`; the checked OpenAPI contract is at `/api/v1/openapi.json`.
 
 Successful API routes use JSON except completed downloads. Errors return non-success HTTP status with a descriptive text body: invalid inputs 400, unknown ID 404, and busy/in-use/unavailable operations 409. Check the response before proceeding. Start conflicts never create a second session. Save the ID returned by Start so delayed calendar stops cannot stop a later recording.
 

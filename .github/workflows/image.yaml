@@ -53,10 +53,17 @@ jobs:
           docker run -d --name recorder-smoke -p 127.0.0.1:8080:8080 -v recorder-smoke:/data stream-recorder:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/health && break || sleep 1; done
           curl -fsS -X PUT -H 'Content-Type: application/json' -d '{"source_url":"https://example.org/live.m3u8","storage_cap_bytes":1073741824}' http://127.0.0.1:8080/api/settings
+          curl -fsS -X PUT -H 'Content-Type: application/json' -d '{"player_url":"https://player.example/watch","allowed_origin":"https://player.example","public_tracking_url":"http://127.0.0.1:8080","timezone":"UTC","enabled":true}' http://127.0.0.1:8080/api/v1/viewers/config > viewer-config-before.json
+          tracking_key=$(python -c 'import json; print(json.load(open("viewer-config-before.json"))["tracking_key"])')
+          configuration_id=$(python -c 'import json; print(json.load(open("viewer-config-before.json"))["configuration_id"])')
+          curl -fsS -X POST -H 'Origin: https://player.example' -H "X-Tracking-Key: $tracking_key" -H 'Content-Type: application/json' -d '{"browser_id":"container-browser-01","tab_id":"container-tab-00000001","playing":true}' http://127.0.0.1:8080/api/v1/viewers/report
           docker rm -f recorder-smoke
           docker run -d --name recorder-smoke -p 127.0.0.1:8080:8080 -v recorder-smoke:/data stream-recorder:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/health && break || sleep 1; done
           curl -fsS http://127.0.0.1:8080/api/settings | python -c 'import json,sys; s=json.load(sys.stdin); assert s["source_url"] == "https://example.org/live.m3u8"; assert s["storage_cap_bytes"] == 1073741824'
+          curl -fsS http://127.0.0.1:8080/api/v1/viewers/config > viewer-config-after.json
+          python -c 'import json; before=json.load(open("viewer-config-before.json")); after=json.load(open("viewer-config-after.json")); assert after["enabled"] is True; assert after["configuration_id"] == before["configuration_id"]; assert after["detail_retention_days"] == 90; assert after["history_retention_days"] == 730; assert "tracking_key" not in after'
+          curl -fsS http://127.0.0.1:8080/api/v1/viewers/live | python -c 'import json,sys; s=json.load(sys.stdin); assert s["state"] == "available"; assert s["count"] == 1'
           curl -fsS http://127.0.0.1:8080/ | grep -q 'Stream Recorder'
           docker rm -f recorder-smoke
           docker volume rm recorder-smoke

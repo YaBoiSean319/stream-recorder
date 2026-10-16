@@ -2712,6 +2712,513 @@
           }
         }
       }
+    },
+    "/api/v1/viewers/live": {
+      "get": {
+        "operationId": "viewerLive",
+        "summary": "Live viewer status",
+        "x-permission": "viewers:read",
+        "responses": {
+          "200": {
+            "description": "Current anonymous browser count, or disabled state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerLive"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/config": {
+      "get": {
+        "operationId": "viewerConfigRead",
+        "summary": "Read external-player tracking configuration",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Configuration including configuration_id, detail_retention_days (default 90), and history_retention_days (default 730); tracking secret is never returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerConfiguration"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "put": {
+        "operationId": "viewerConfigWrite",
+        "summary": "Configure external-player tracking",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Updated configuration and one-time generated key/snippet. Retention must satisfy 1 <= detail_retention_days <= history_retention_days <= 730.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ViewerConfiguration"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tracking_key": {
+                          "type": "string",
+                          "description": "Returned once when generated."
+                        },
+                        "snippet": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewerConfigurationUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/key/rotate": {
+      "post": {
+        "operationId": "viewerKeyRotate",
+        "summary": "Revoke old tracking key and generate a replacement",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "One-time key and generated player snippet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tracking_key",
+                    "tracking_key_configured",
+                    "snippet"
+                  ],
+                  "properties": {
+                    "tracking_key": {
+                      "type": "string"
+                    },
+                    "tracking_key_configured": {
+                      "type": "boolean"
+                    },
+                    "snippet": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/report": {
+      "options": {
+        "operationId": "viewerReportPreflight",
+        "summary": "Preflight anonymous playback report",
+        "x-permission": "public",
+        "responses": {
+          "204": {
+            "description": "CORS preflight accepted for the configured player origin"
+          }
+        }
+      },
+      "post": {
+        "operationId": "viewerReport",
+        "summary": "Report anonymous playback presence",
+        "x-permission": "public tracking key and allowed Origin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "browser_id",
+                  "tab_id",
+                  "playing"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "browser_id": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 80
+                  },
+                  "tab_id": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 80
+                  },
+                  "playing": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Report accepted"
+          },
+          "401": {
+            "description": "Missing, invalid, or revoked key"
+          },
+          "403": {
+            "description": "Disallowed origin"
+          },
+          "429": {
+            "description": "Rate or active-session limit"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "description": "Report exceeds 4 KiB"
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "X-Tracking-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Dedicated tracking key returned once by Administrator configuration save or rotation."
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Must match the configured allowed player origin."
+          }
+        ]
+      }
+    },
+    "/api/v1/viewers/history": {
+      "get": {
+        "operationId": "viewerHistory",
+        "summary": "Read bounded historical viewer samples and statistics",
+        "description": "Returns a range-limited, configuration-filtered timeline plus daily peaks, a day-of-week/hour heatmap, selectable local-time periods, and overlapping Recording capture windows. Unix timestamps are seconds. Missing collection intervals are explicit gaps; all audience metrics use only covered time.",
+        "x-permission": "viewers:read",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "example": 1792166400
+            },
+            "description": "Range start, Unix seconds. Required; must be increasing, and end may be at most 60 seconds ahead of server time."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "example": 1792166400
+            },
+            "description": "Exclusive range end, Unix seconds; maximum configured history retention (default 730 days, maximum 730). Required; must be increasing, and end may be at most 60 seconds ahead of server time."
+          },
+          {
+            "name": "resolution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "30s",
+                "1m",
+                "5m",
+                "15m",
+                "1h",
+                "6h",
+                "1d"
+              ],
+              "default": "auto"
+            },
+            "description": "Requested aggregation. `auto` selects a range-appropriate step. Server may raise effective resolution to keep output at or below 1,000 buckets; rollups require at least one hour.",
+            "example": "5m"
+          },
+          {
+            "name": "configuration_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Historical player configuration identity; defaults to the currently configured player.",
+            "example": "d7a7a0f1-b314-4c1f-8dd8-36de78c34cc9"
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "IANA reporting timezone used to group daily peaks and heatmap cells. Defaults to the current shared reporting timezone; include the returned value when preserving an analytics view.",
+            "example": "America/Indiana/Indianapolis"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Includes ordered timeline buckets; range statistics and coverage; daily_peaks with browsers, local date, peak time, and coverage; heatmap cells keyed by Sunday=0 through Saturday=6 and hour=0–23 with individually selectable periods (including separate DST folds); and overlapping recordings with actual capture start/end. Active recording end is bounded by the current time. Periods without known samples are not invented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/key": {
+      "delete": {
+        "operationId": "viewerKeyRevoke",
+        "summary": "Revoke external-player tracking key",
+        "description": "Revokes current key immediately and clears active presence. Does not return key material. Tracking must be enabled again and a key generated by configuration save or rotation before reporting resumes.",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Key revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "revoked",
+                    "tracking_key_configured"
+                  ],
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    },
+                    "tracking_key_configured": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/configurations": {
+      "get": {
+        "operationId": "viewerConfigurations",
+        "summary": "List historical player configurations",
+        "description": "Returns configuration identities and their known coverage bounds for separating historical audiences.",
+        "x-permission": "viewers:read",
+        "responses": {
+          "200": {
+            "description": "Configuration history, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerConfigurations"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/diagnostics": {
+      "get": {
+        "operationId": "viewerDiagnostics",
+        "summary": "Read viewer collection diagnostics",
+        "description": "Administrator-only health and last-contact diagnostics. Never returns tracking secrets.",
+        "x-permission": "viewers:manage",
+        "responses": {
+          "200": {
+            "description": "Current collector, player contact, and retention status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerDiagnostics"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/viewers/export.csv": {
+      "get": {
+        "operationId": "viewerExportCsv",
+        "summary": "Export bounded viewer analytics as CSV",
+        "description": "Exports the same selected range, player configuration, reporting timezone, and resolution as history. Rows identify metadata, aggregate statistics, timeline buckets (including zero-coverage gaps), daily peaks, heatmap cells and actual periods, and Recording context. Includes no browser or tab identifiers and no tracking credentials. Max 1,000 timeline buckets; maximum 730 days, with derived daily and heatmap rows bounded by that range. CSV cells are escaped and spreadsheet formula prefixes are neutralized.",
+        "x-permission": "viewers:export",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Range start, Unix seconds."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Exclusive range end, Unix seconds; maximum configured history retention (default 730 days, maximum 730)."
+          },
+          {
+            "name": "resolution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "30s",
+                "1m",
+                "5m",
+                "15m",
+                "1h",
+                "6h",
+                "1d"
+              ],
+              "default": "auto"
+            }
+          },
+          {
+            "name": "configuration_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Historical player configuration identity; defaults to the currently configured player."
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "IANA reporting timezone used to group daily peaks and heatmap cells. Defaults to the current shared reporting timezone; include the returned value when preserving an analytics view."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "UTF-8 CSV attachment",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3604,6 +4111,435 @@
           }
         },
         "description": "Omitted fields retain their current values; an omitted secret leaves the existing signing secret unchanged."
+      },
+      "ViewerLive": {
+        "type": "object",
+        "required": [
+          "state",
+          "count",
+          "as_of",
+          "collector_health",
+          "last_report_at"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "disabled"
+            ]
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "collector_health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unavailable"
+            ]
+          },
+          "last_report_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_after_seconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "ViewerConfiguration": {
+        "type": "object",
+        "required": [
+          "player_url",
+          "allowed_origin",
+          "public_tracking_url",
+          "timezone",
+          "timezone_configured",
+          "enabled",
+          "configuration_id",
+          "detail_retention_days",
+          "history_retention_days",
+          "tracking_key_configured",
+          "collector_health",
+          "last_report_at",
+          "snippet"
+        ],
+        "properties": {
+          "player_url": {
+            "type": "string"
+          },
+          "allowed_origin": {
+            "type": "string"
+          },
+          "public_tracking_url": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "timezone_configured": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration_id": {
+            "type": "string"
+          },
+          "detail_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 730
+          },
+          "history_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 730
+          },
+          "tracking_key_configured": {
+            "type": "boolean"
+          },
+          "collector_health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unavailable"
+            ]
+          },
+          "last_report_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "snippet": {
+            "type": "string"
+          }
+        }
+      },
+      "ViewerConfigurationUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "player_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "allowed_origin": {
+            "type": "string",
+            "format": "uri"
+          },
+          "public_tracking_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "detail_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 730
+          },
+          "history_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 730
+          }
+        }
+      },
+      "ViewerConfigurations": {
+        "type": "object",
+        "required": [
+          "current_configuration_id",
+          "items"
+        ],
+        "properties": {
+          "current_configuration_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "player_url",
+                "created_at",
+                "first_at",
+                "last_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "player_url": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "number"
+                },
+                "first_at": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "last_at": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "ViewerDiagnostics": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "configuration_id",
+          "tracking_key_configured",
+          "collector_health",
+          "last_sample_at",
+          "last_report_at",
+          "active_browser_count",
+          "detail_retention_days",
+          "history_retention_days"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration_id": {
+            "type": "string"
+          },
+          "tracking_key_configured": {
+            "type": "boolean"
+          },
+          "collector_health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unavailable"
+            ]
+          },
+          "last_sample_at": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "last_report_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "active_browser_count": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "detail_retention_days": {
+            "type": "integer"
+          },
+          "history_retention_days": {
+            "type": "integer"
+          }
+        }
+      },
+      "ViewerHistory": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "timezone",
+          "configuration_id",
+          "configurations",
+          "resolution_seconds",
+          "precision",
+          "partial_rollup_hours_excluded",
+          "detail_expired",
+          "history_expired",
+          "detail_retention_days",
+          "history_retention_days",
+          "coverage_seconds",
+          "coverage_percent",
+          "statistics",
+          "live",
+          "points",
+          "daily_peaks",
+          "heatmap",
+          "recordings"
+        ],
+        "properties": {
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "configuration_id": {
+            "type": "string"
+          },
+          "configurations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "resolution_seconds": {
+            "type": "number"
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "sampled",
+              "hourly-rollup"
+            ]
+          },
+          "partial_rollup_hours_excluded": {
+            "type": "integer"
+          },
+          "detail_expired": {
+            "type": "boolean"
+          },
+          "history_expired": {
+            "type": "boolean"
+          },
+          "detail_retention_days": {
+            "type": "integer"
+          },
+          "history_retention_days": {
+            "type": "integer"
+          },
+          "coverage_seconds": {
+            "type": "number"
+          },
+          "coverage_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "statistics": {
+            "type": "object",
+            "required": [
+              "peak",
+              "average",
+              "viewer_hours",
+              "covered_seconds"
+            ],
+            "properties": {
+              "peak": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "average": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "viewer_hours": {
+                "type": "number"
+              },
+              "covered_seconds": {
+                "type": "number"
+              }
+            }
+          },
+          "live": {
+            "$ref": "#/components/schemas/ViewerLive"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "timestamp",
+                "average",
+                "peak",
+                "covered_seconds",
+                "expected_seconds",
+                "complete"
+              ],
+              "properties": {
+                "timestamp": {
+                  "type": "number"
+                },
+                "average": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "peak": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "covered_seconds": {
+                  "type": "number"
+                },
+                "expected_seconds": {
+                  "type": "number"
+                },
+                "complete": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "daily_peaks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "heatmap": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "recordings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
       }
     },
     "responses": {

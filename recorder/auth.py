@@ -16,10 +16,13 @@ OPERATOR_PERMISSIONS = frozenset({
     'status:read', 'preview:read', 'branding:read', 'recordings:read', 'recordings:start',
     'recordings:stop', 'recordings:download', 'recordings:pin', 'recordings:title',
     'uploads:read', 'uploads:create', 'uploads:retry', 'uploads:cancel',
+    'viewers:read',
+    'viewers:export',
 })
 ADMIN_PERMISSIONS = OPERATOR_PERMISSIONS | frozenset({
     'settings:read', 'settings:write', 'recordings:delete', 'auth:manage',
     'branding:write', 'youtube:manage', 'webhooks:manage',
+    'viewers:manage',
 })
 
 
@@ -37,6 +40,16 @@ def operation(request):
         return 'branding:read' if method == 'GET' else 'branding:write'
     if path.startswith('/branding/'):
         return 'branding:read' if method == 'GET' else 'branding:write'
+    if path == '/viewers/report':
+        return 'auth:public'
+    if path in {'/viewers/live', '/viewers/history'}:
+        return 'viewers:read'
+    if path == '/viewers/configurations':
+        return 'viewers:read'
+    if path == '/viewers/export.csv':
+        return 'viewers:export'
+    if path.startswith('/viewers/'):
+        return 'viewers:manage'
     if path == '/recordings':
         return 'recordings:read' if method == 'GET' else 'recordings:start'
     if path == '/stop' or path.endswith('/stop') and path.startswith('/recordings/'):
@@ -174,7 +187,7 @@ class Access:
                 raise web.HTTPForbidden(text='Administrator permission required')
         try:
             response = await handler(request)
-            if '/auth/' in request.path or '/youtube/' in request.path:
+            if '/auth/' in request.path or '/youtube/' in request.path or '/viewers/' in request.path:
                 response.headers['Cache-Control'] = 'no-store'
             return response
         except (json.JSONDecodeError, ValueError, TypeError, AttributeError):

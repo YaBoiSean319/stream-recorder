@@ -51,8 +51,26 @@ The API is the supported automation surface for server state. Paths in the matri
 | Inspect webhook delivery status | `GET /api/v1/webhooks/deliveries` | `webhooks:manage` | Read-only latest 200 delivery records. |
 | Read OpenAPI or use Try it | `GET /api/v1/openapi.json`; `GET /api/v1/docs` | current application access | Authenticated sessions use their normal role and CSRF; API keys use their scopes. Try it submits only after explicit confirmation and restricts requests to the selected `/api/v1` operation. |
 
+## Viewer analytics
+
+| GUI operation | API operation | Permission | Effect / boundary |
+| --- | --- | --- | --- |
+| View live audience, timeline, statistics, daily peaks, day/hour heatmap, or Recording context | `GET /api/v1/viewers/live`; `GET /api/v1/viewers/history`; `GET /api/v1/viewers/configurations` | `viewers:read` | Operators and Administrators; reports include per-period coverage, selectable local-time heatmap periods, and capture windows; range is bounded by configured retention (maximum 730 days). Optional `timezone` preserves report grouping context. |
+| Export the selected viewer analytics range | `GET /api/v1/viewers/export.csv` | `viewers:export` | Operators and Administrators; preserves selected range, configuration, timezone and resolution. CSV includes coverage and gap rows and does not contain tracking secrets or browser/tab identifiers. |
+| Configure external player tracking, inspect diagnostics, or rotate/revoke key | `GET/PUT /api/v1/viewers/config`; `GET /api/v1/viewers/diagnostics`; `POST /api/v1/viewers/key/rotate`; `DELETE /api/v1/viewers/key` | `viewers:manage` | Administrator only; configuration reads never reveal key material; rotation returns replacement once and DELETE revokes without readback. |
+
 ## Permission model
 
 With authentication enabled, browser roles are checked on every request and state-changing session requests require CSRF. An Operator may perform recording, preview, download, title/pin, and upload operations. Administrators additionally manage shared settings, branding, authentication, YouTube, and webhooks, and may deliberately delete recordings. Scoped keys are checked against the operation and, for a combined recording `PATCH`, each changed field. An invalid supplied key never falls back to a browser session. `require_api_key` applies to machine requests independently of browser login; a signed-in session continues to work.
 
 When built-in authentication is disabled, the deployment's external access boundary still applies. In local mode the app treats requests as an Administrator unless `require_api_key` is enabled. Do not expose the recorder directly to an untrusted network.
+
+
+## External player viewer tracking
+
+| GUI operation | API operation | Permission | Effect / boundary |
+| --- | --- | --- | --- |
+| Read live viewer count and timestamp on Recorder | `GET /api/v1/viewers/live` | `viewers:read` | Returns available count or disabled state, collector health, last valid player report, and as-of time. |
+| Configure external player, origin, public base URL, reporting timezone, and enablement | `GET/PUT /api/v1/viewers/config` | `viewers:manage` | Administrator only; player URL is separate from the direct HLS stream source. |
+| Generate/revoke the external player key and copyable snippet | Save configuration or `POST /api/v1/viewers/key/rotate` | `viewers:manage` | Raw key and snippet appear only in the write response; rotate when the snippet is lost. |
+| Report anonymous playback from an instrumented video | `POST /api/v1/viewers/report` | Dedicated tracking key + exact allowed `Origin` | Narrow public ingestion; only browser ID, tab ID, and playback flag are accepted. |

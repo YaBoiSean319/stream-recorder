@@ -213,6 +213,9 @@ class Recorder:
             if self.closing:
                 return
             r['state'] = 'processing'
+            # Capture analytics end at the actual transition out of HLS capture,
+            # before MP4 processing time is included in the recording window.
+            r['ended_at'] = stamp()
             r['stop_requested'] = True
             self.save(r)
             await self.finalize(r, folder)
@@ -221,6 +224,7 @@ class Recorder:
         except Exception as exc:
             await self.terminate()
             r['state'] = 'error'
+            r.setdefault('ended_at', stamp())
             r['error'] = str(exc)
             self.save(r)
         finally:
@@ -339,6 +343,8 @@ def create_app(path=None):
     app[web.AppKey('recorder', Recorder)] = service
     from recorder.branding import install as install_branding
     install_branding(app, service)
+    from recorder.viewers import install as install_viewers
+    install_viewers(app, service)
 
     async def api(request):
         try:
