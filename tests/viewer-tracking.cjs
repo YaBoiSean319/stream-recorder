@@ -1,7 +1,7 @@
 /* Local instrumented-player browser checks; runs against the acceptance HLS fixture. */
 const assert = require('node:assert/strict');
 module.exports = async function(browser, page, base, previewUrl) {
-  const context = page.context();
+  const context = await browser.newContext();
   const origin = new URL(base).origin;
   const settings = await (await page.request.put(base+'/api/v1/viewers/config', {data:{
     player_url:origin+'/player-fixture', allowed_origin:origin,
@@ -46,4 +46,5 @@ module.exports = async function(browser, page, base, previewUrl) {
   assert.equal(oldKey.status(),401,'Rotating key must revoke previous player snippets');
   assert.ok(rotated.snippet.includes(rotated.tracking_key));
   await page.request.put(base+'/api/v1/viewers/config',{data:{player_url:'',allowed_origin:'',public_tracking_url:'',enabled:false}});
+  await context.close();
 };
