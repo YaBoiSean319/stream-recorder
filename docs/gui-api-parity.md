@@ -51,6 +51,13 @@ The API is the supported automation surface for server state. Paths in the matri
 | Inspect webhook delivery status | `GET /api/v1/webhooks/deliveries` | `webhooks:manage` | Read-only latest 200 delivery records. |
 | Read OpenAPI or use Try it | `GET /api/v1/openapi.json`; `GET /api/v1/docs` | current application access | Authenticated sessions use their normal role and CSRF; API keys use their scopes. Try it submits only after explicit confirmation and restricts requests to the selected `/api/v1` operation. |
 
+## Viewer analytics
+
+| GUI operation | API operation | Permission | Effect / boundary |
+| --- | --- | --- | --- |
+| View live audience or historical timeline/statistics | `GET /api/v1/viewers/live`; `GET /api/v1/viewers/history` | `viewers:read` | Operators and Administrators; historical ranges are bounded to 90 days and unknown collection time stays uncovered. |
+| Configure external player tracking | `GET/PUT /api/v1/viewers/config`; `POST /api/v1/viewers/key/rotate` | `viewers:manage` | Administrator only; configuration and key lifecycle stay separate from analytics reads. |
+
 ## Permission model
 
 With authentication enabled, browser roles are checked on every request and state-changing session requests require CSRF. An Operator may perform recording, preview, download, title/pin, and upload operations. Administrators additionally manage shared settings, branding, authentication, YouTube, and webhooks, and may deliberately delete recordings. Scoped keys are checked against the operation and, for a combined recording `PATCH`, each changed field. An invalid supplied key never falls back to a browser session. `require_api_key` applies to machine requests independently of browser login; a signed-in session continues to work.

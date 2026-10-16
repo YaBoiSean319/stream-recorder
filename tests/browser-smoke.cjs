@@ -54,6 +54,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => document.querySelector('#preview').currentTime > 0, null, {timeout:15000});
     const fixturePreview=(await (await page.request.get(base+'/api/v1/preview')).json()).preview_url;
     await require('./viewer-tracking.cjs')(browser,page,base,fixturePreview);
+    await require('./viewer-history.cjs')(browser,page,base);
     await page.locator('#duration').fill('1');
     await page.locator('#recording-title').fill('Town Hall / Fall');
     await page.locator('#start').click();

@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+
+module.exports = async function(browser,page,base) {
+  const end=Date.now()/1000,start=end-3600;
+  const initial=await page.request.get(`${base}/api/v1/viewers/history?from=${start}&to=${end}`);
+  assert.equal(initial.status(),200,'Operators can query bounded history');
+  const contract=await initial.json();
+  assert.ok(contract.configuration_id);
+  assert.ok(contract.statistics);
+  assert.ok(contract.coverage_percent>=0&&contract.coverage_percent<=100);
+  await page.getByRole('link',{name:'Viewer analytics',exact:true}).click();
+  await page.locator('#analytics-screen').waitFor({state:'visible'});
+  await page.locator('#timeline-status').waitFor();
+  await page.getByRole('button',{name:'Peak',exact:true}).click();
+  assert.equal(await page.locator('#metric-peak').getAttribute('aria-pressed'),'true');
+  await page.getByRole('button',{name:'24 hours'}).click();
+  await page.waitForFunction(()=>document.querySelector('#timeline-status').textContent!=='Loading history…');
+  const chart=page.locator('#viewer-chart');
+  const box=await chart.boundingBox();
+  await page.mouse.move(box.x+box.width*.2,box.y+box.height*.65);
+  await page.mouse.down();
+  await page.mouse.move(box.x+box.width*.7,box.y+box.height*.65,{steps:4});
+  await page.mouse.up();
+  await page.waitForFunction(()=>document.querySelector('#timeline-status').textContent!=='Loading history…');
+  await page.getByRole('button',{name:'Reset zoom'}).click();
+  await page.locator('#metric-average').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#metric-average').getAttribute('aria-pressed'),'true');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Analytics remains usable without horizontal page overflow on mobile');
+  await chart.focus();
+  await page.keyboard.press('ArrowRight');
+  assert.ok(await page.locator('#viewer-chart').getAttribute('aria-label'));
+  await page.getByRole('link',{name:'Recorder',exact:true}).click();
+  await page.locator('.workspace').waitFor({state:'visible'});
+};

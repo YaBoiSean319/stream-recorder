@@ -41,7 +41,7 @@ def operation(request):
         return 'branding:read' if method == 'GET' else 'branding:write'
     if path == '/viewers/report':
         return 'auth:public'
-    if path == '/viewers/live':
+    if path in {'/viewers/live', '/viewers/history'}:
         return 'viewers:read'
     if path.startswith('/viewers/'):
         return 'viewers:manage'

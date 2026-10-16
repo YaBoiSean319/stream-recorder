@@ -2820,6 +2820,76 @@
           }
         }
       }
+    },
+    "/api/v1/viewers/history": {
+      "get": {
+        "operationId": "viewerHistory",
+        "summary": "Read bounded historical viewer samples and statistics",
+        "description": "Returns a range-limited, configuration-filtered timeline. Unix timestamps are seconds. Missing collection intervals are explicit empty buckets; statistics use only covered time.",
+        "x-permission": "viewers:read",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Range start, Unix seconds."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Exclusive range end, Unix seconds; maximum 90 days after from."
+          },
+          {
+            "name": "resolution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "30s",
+                "1m",
+                "5m",
+                "15m",
+                "1h",
+                "6h",
+                "1d"
+              ],
+              "default": "auto"
+            }
+          },
+          {
+            "name": "configuration_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Historical player configuration identity; defaults to the currently configured player."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Range statistics, current live status, coverage, effective resolution, available configuration identities, and ordered chart buckets. A bucket with zero coverage has null average and peak."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {

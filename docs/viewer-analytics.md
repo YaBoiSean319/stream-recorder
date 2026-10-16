@@ -29,3 +29,23 @@ Scoped keys may be limited to `viewers:read`; Administrator scoped keys need `vi
 ## Measurement boundaries
 
 The live count is the number of distinct browser IDs with at least one recently reporting tab. It does not represent unique people. This initial viewer-tracking slice does not reconstruct audience history before instrumentation or count uninstrumented players.
+
+## Historical timeline and statistics
+
+Stream Recorder samples current distinct active browser IDs every 30 seconds in the background, independent of recordings and open browser pages. Samples, coverage markers, and player configuration identities are stored in the application's existing durable SQLite state. A disabled collector stores uncovered intervals; a write failure or process outage leaves missing intervals. The collector does not backfill them or integrate stale presence. History is retained alongside the rest of application state; this implementation does not yet apply the parent specification's configurable detail/rollup retention policy.
+
+Operators and Administrators can open **Viewer analytics** from the main navigation. The page offers last hour, 24 hours, 7 days, 30 days, and custom ranges. It refreshes every two minutes while open. The chart supports pointer hover, drag-to-zoom and reset, average/peak display, keyboard focus and arrow-key inspection, and responsive mobile layout. The live count and its timestamp remain separate from the selected-range statistics. A configuration selector keeps audiences from different player setups separate; the default is the currently configured player.
+
+### History API
+
+`GET /api/v1/viewers/history` requires `viewers:read` (Operator or Administrator). Parameters:
+
+- `from` and `to`: required Unix timestamps in seconds; `to` is exclusive, `from < to`, future end is limited to one minute, and the range may not exceed 90 days.
+- `resolution`: `auto` (default), `30s`, `1m`, `5m`, `15m`, `1h`, `6h`, or `1d`. The server raises the effective resolution when needed to bound the response to at most 1,000 buckets.
+- `configuration_id`: optional identity returned in `configurations`; omitted means the current player configuration.
+
+The response includes `timezone`, `configuration_id`, all known `configurations` with their first and last sample times, `resolution_seconds`, `coverage_seconds`, `coverage_percent`, `statistics`, current `live` status, and ordered `points`. Each point has `timestamp`, covered duration, weighted `average`, and `peak`. A bucket with no known samples has `covered_seconds: 0` and null metrics. No unknown duration contributes to the range peak, time-weighted average, or viewer-hours. All-zero covered intervals return zero metrics; a wholly uncovered range returns null peak and average and zero viewer-hours. `statistics.average` is the time-weighted concurrent browser count; `statistics.viewer_hours` is the sum of covered count-times-hours. Partial coverage is shown explicitly and must not be interpreted as a full-period average.
+
+Invalid/missing timestamps, reversed or over-90-day ranges, unknown resolutions, and malformed configuration IDs return `400 invalid_request`. Read requests with no permission return `401 unauthorized` or `403 forbidden` according to authentication state. Configuration endpoints remain Administrator-only (`viewers:manage`). These APIs never return tracking keys.
+
+The sampler persists a point on its regular interval; therefore history resolution is bounded by that sampling cadence. Reporting-timezone changes affect labels, not stored Unix timestamps. This timeline does not yet include daily peaks, heatmaps, recording overlays, CSV export, or configurable retention; those are separate analytics work.

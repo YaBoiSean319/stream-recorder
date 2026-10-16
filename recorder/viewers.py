@@ -2,14 +2,18 @@
 import hashlib
 import ipaddress
 import json
+import math
 import re
 import secrets
 import time
+import asyncio
+import uuid
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
 ID = re.compile(r"^[A-Za-z0-9_-]{16,80}$")
+SAMPLE_INTERVAL = 30
 
 
 def origin(value):
@@ -53,11 +57,15 @@ class Viewers:
         self.db = service.db
         self.db.execute("CREATE TABLE IF NOT EXISTS viewer_config(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS viewer_sessions(browser_id TEXT NOT NULL,tab_id TEXT NOT NULL,reported_at REAL NOT NULL,PRIMARY KEY(browser_id,tab_id))")
+        self.db.execute("CREATE TABLE IF NOT EXISTS viewer_samples(sampled_at REAL PRIMARY KEY,count INTEGER,configuration_id TEXT NOT NULL,covered INTEGER NOT NULL)")
         self.db.commit()
         self.rate = {}
         row = self.db.execute("SELECT payload FROM viewer_config WHERE id=1").fetchone()
         self.config = json.loads(row[0]) if row else {"player_url":"", "allowed_origin":"", "public_tracking_url":"", "timezone":"UTC", "timezone_configured":False, "enabled":False, "tracking_hash":"", "last_report_at":None}
         self.config.setdefault("timezone_configured", True)
+        self.config.setdefault("configuration_id", str(uuid.uuid4()))
+        # Persisted history cannot prove that this process's collector is healthy.
+        self.last_sample_at = None
         self.key_for_response = ""
         self._save()
 
@@ -124,11 +132,14 @@ if(!video.paused&&!video.ended){{progressed=false;timer=setInterval(tick,30000)}
             raise web.HTTPBadRequest(text="enabled must be boolean")
         if updated["enabled"] and not all((updated["player_url"], updated["allowed_origin"], updated["public_tracking_url"])):
             raise web.HTTPBadRequest(text="Player URL, allowed origin, and public tracking URL are required when enabled")
+        if updated["enabled"] != self.config["enabled"]:
+            self.db.execute("DELETE FROM viewer_sessions")
         # A changed player configuration gets a fresh anonymous cohort and key.
         changed = any(updated[k] != self.config[k] for k in ("player_url", "allowed_origin", "public_tracking_url"))
         if changed:
             self.db.execute("DELETE FROM viewer_sessions")
             updated["tracking_hash"] = ""
+            updated["configuration_id"] = str(uuid.uuid4())
         self.config = updated
         key = None
         if self.config["enabled"] and not self.config["tracking_hash"]:
@@ -203,11 +214,119 @@ if(!video.paused&&!video.ended){{progressed=false;timer=setInterval(tick,30000)}
 
     async def live(self, request):
         if not self.config["enabled"]:
-            return web.json_response({"state":"disabled","count":None,"as_of":None,"collector_health":"healthy","last_report_at":self.config["last_report_at"]})
+            return web.json_response({"state":"disabled","count":None,"as_of":None,"collector_health":self.collector_health(),"last_report_at":self.config["last_report_at"]})
         now = time.time()
         self.db.execute("DELETE FROM viewer_sessions WHERE reported_at<=?", (now - 90,))
         count = self.db.execute("SELECT COUNT(DISTINCT browser_id) FROM viewer_sessions WHERE reported_at>?", (now - 90,)).fetchone()[0]
-        return web.json_response({"state":"available","count":count,"as_of":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime(now)),"collector_health":"healthy","last_report_at":self.config["last_report_at"],"expires_after_seconds":90})
+        return web.json_response({"state":"available","count":count,"as_of":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime(now)),"collector_health":self.collector_health(),"last_report_at":self.config["last_report_at"],"expires_after_seconds":90})
+
+    def collector_health(self):
+        return "healthy" if self.last_sample_at is not None and time.time() - self.last_sample_at <= SAMPLE_INTERVAL * 2 else "unavailable"
+
+    async def sample_once(self, now=None):
+        """Persist one durable point; unavailable collection is an explicit gap."""
+        now = time.time() if now is None else now
+        covered = bool(self.config["enabled"])
+        count = None
+        if covered:
+            self.db.execute("DELETE FROM viewer_sessions WHERE reported_at<=?", (now - 90,))
+            count = self.db.execute("SELECT COUNT(DISTINCT browser_id) FROM viewer_sessions WHERE reported_at>?", (now - 90,)).fetchone()[0]
+        self.db.execute("INSERT OR REPLACE INTO viewer_samples VALUES(?,?,?,?)", (now, count, self.config["configuration_id"], int(covered)))
+        self.db.commit()
+        self.last_sample_at = now
+
+    async def collect(self, app):
+        while True:
+            try:
+                await self.sample_once()
+            except Exception:
+                # A failed write must remain an unknown interval, never a fabricated zero.
+                pass
+            await asyncio.sleep(SAMPLE_INTERVAL)
+
+    async def start(self, app):
+        self.collector_task = asyncio.create_task(self.collect(app))
+
+    async def stop(self, app):
+        task = getattr(self, "collector_task", None)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    def parse_range(self, request):
+        try:
+            start, end = float(request.query["from"]), float(request.query["to"])
+        except (KeyError, ValueError):
+            raise web.HTTPBadRequest(text="from and to must be Unix timestamps") from None
+        now = time.time()
+        if not (0 < start < end <= now + 60) or end - start > 90 * 86400:
+            raise web.HTTPBadRequest(text="Range must be increasing and no longer than 90 days")
+        return start, end
+
+    async def history(self, request):
+        start, end = self.parse_range(request)
+        now = time.time()
+        try:
+            resolution = request.query.get("resolution", "auto")
+            if resolution not in {"auto", "30s", "1m", "5m", "15m", "1h", "6h", "1d"}:
+                raise ValueError
+            config_id = request.query.get("configuration_id", self.config["configuration_id"])
+            if config_id is not None and (len(config_id) > 64 or not re.fullmatch(r"[a-fA-F0-9-]+", config_id)):
+                raise ValueError
+        except ValueError:
+            raise web.HTTPBadRequest(text="Invalid resolution or configuration_id") from None
+        step = {"30s":30,"1m":60,"5m":300,"15m":900,"1h":3600,"6h":21600,"1d":86400}.get(resolution)
+        if step is None:
+            step = max(SAMPLE_INTERVAL, (end-start) / 500)
+        step = max(1, math.ceil(max(step, (end-start) / 1000)))
+        rows = self.db.execute("SELECT sampled_at,count,configuration_id,covered FROM viewer_samples WHERE sampled_at<? AND sampled_at>=? AND configuration_id=? ORDER BY sampled_at", (end, start - SAMPLE_INTERVAL, config_id)).fetchall()
+        buckets = {}
+        covered_seconds = 0.0
+        weighted = 0.0
+        viewer_hours = 0.0
+        peak = 0
+        for i, row in enumerate(rows):
+            stamp, count, identity, covered = row
+            if not covered:
+                continue
+            next_stamp = rows[i+1][0] if i+1 < len(rows) and rows[i+1][2] == identity else stamp + SAMPLE_INTERVAL
+            if i+1 == len(rows) and now - stamp > SAMPLE_INTERVAL * 1.5:
+                continue
+            duration = min(end, stamp + SAMPLE_INTERVAL, next_stamp) - max(start, stamp)
+            if duration <= 0 or next_stamp - stamp > SAMPLE_INTERVAL * 1.5:
+                continue
+            bucket = int(stamp // step * step)
+            item = buckets.setdefault(bucket, {"timestamp":bucket,"average":0,"peak":0,"covered_seconds":0,"_weighted":0})
+            item["_weighted"] += count * duration
+            item["covered_seconds"] += duration
+            item["peak"] = max(item["peak"], count)
+            covered_seconds += duration
+            weighted += count * duration
+            viewer_hours += count * duration / 3600
+            peak = max(peak, count)
+        points = []
+        for item in sorted(buckets.values(), key=lambda x:x["timestamp"]):
+            if item["covered_seconds"]:
+                item["average"] = item["_weighted"] / item["covered_seconds"]
+            del item["_weighted"]
+            points.append(item)
+        by_bucket = {item["timestamp"]:item for item in points}
+        first_bucket = int(start // step * step)
+        last_bucket = int((end - 1e-6) // step * step)
+        points = []
+        for bucket in range(first_bucket, last_bucket + 1, step):
+            expected = max(0, min(end, bucket + step) - max(start, bucket))
+            point = by_bucket.get(bucket, {"timestamp":bucket,"average":None,"peak":None,"covered_seconds":0})
+            point["expected_seconds"] = expected
+            point["complete"] = point["covered_seconds"] >= expected - 0.01
+            points.append(point)
+        live = await self.live(request)
+        live_data = json.loads(live.body)
+        configurations = [{"id":r[0],"first_at":r[1],"last_at":r[2]} for r in self.db.execute("SELECT configuration_id,MIN(sampled_at),MAX(sampled_at) FROM viewer_samples GROUP BY configuration_id ORDER BY MAX(sampled_at) DESC")]
+        return web.json_response({"from":start,"to":end,"timezone":self.config["timezone"],"configuration_id":config_id,"configurations":configurations,"resolution_seconds":step,"coverage_seconds":covered_seconds,"coverage_percent":min(100, covered_seconds/(end-start)*100),"statistics":{"peak":peak if covered_seconds else None,"average":weighted/covered_seconds if covered_seconds else None,"viewer_hours":viewer_hours,"covered_seconds":covered_seconds},"live":live_data,"points":points})
 
 
 def install(app, service):
@@ -216,6 +335,9 @@ def install(app, service):
     app.router.add_route("OPTIONS", "/api/v1/viewers/report", viewers.report)
     app.router.add_post("/api/v1/viewers/report", viewers.report)
     app.router.add_get("/api/v1/viewers/live", viewers.live)
+    app.router.add_get("/api/v1/viewers/history", viewers.history)
+    app.on_startup.append(viewers.start)
+    app.on_cleanup.append(viewers.stop)
     app.router.add_get("/api/v1/viewers/config", viewers.config_route)
     app.router.add_put("/api/v1/viewers/config", viewers.config_route)
     app.router.add_post("/api/v1/viewers/key/rotate", viewers.rotate)

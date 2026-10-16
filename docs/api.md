@@ -12,7 +12,7 @@ Existing `/api` paths and responses remain compatible. `/api/v1` shares their op
 | Start, stop, pin, title | `recordings:start`, `recordings:stop`, `recordings:pin`, `recordings:title` | Same |
 | Source, storage, settings read/write | — | `settings:read`, `settings:write` |
 | Delete recordings; auth/OIDC/key management | — | `recordings:delete`, `auth:manage` |
-| Read live viewer count | `viewers:read` | Same |
+| Read live viewer count and bounded history/statistics | `GET /api/v1/viewers/live`; `GET /api/v1/viewers/history` | `viewers:read` | Same; history is limited to 90 days, current player by default, and exposes coverage gaps and resolution. |
 | Configure player tracking and rotate key | — | `viewers:manage` |
 
 An omitted permission list gives a key all operations allowed by its role, preserving valid older role-only keys. `GET /api/v1/auth/permissions` returns the selectable permission sets for the Settings UI and automation. Supply a nonempty subset in `POST /api/v1/auth/keys` to narrow it. `expires_at` is an optional future Unix timestamp. The raw key is shown only in the creation response; the server keeps a hash. Listing includes `last_used_at`; deletion revokes immediately. Browser sessions retain role checks and CSRF. To enable `require_api_key`, first configure a local recovery administrator, then POST `/api/v1/auth/config` with `{"require_api_key":true}`. This toggle is separate from `enabled` browser authentication: it rejects unauthenticated machine requests without a key while preserving signed-in browser access. If browser authentication is off, the browser prompts for the local administrator when Require API key is on.
