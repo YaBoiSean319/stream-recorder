@@ -32,6 +32,8 @@ class Recorder:
         self.db.execute('CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY,payload TEXT)')
         self.db.execute('CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY,payload TEXT)')
         self.db.execute('CREATE TABLE IF NOT EXISTS idempotency(caller TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL, recording_id TEXT NOT NULL, PRIMARY KEY(caller,key))')
+        self.db.execute('CREATE TABLE IF NOT EXISTS extension_idempotency(caller TEXT NOT NULL, recording_id TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY(caller,recording_id,key))')
+        self.db.execute('CREATE TABLE IF NOT EXISTS operational_events(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)')
         row = self.db.execute('SELECT payload FROM settings WHERE id=1').fetchone()
         defaults = {'source_url': '', 'storage_cap_bytes': 100 * 1024 ** 3, 'auth_enabled': False}
         self.settings = {**defaults, **(json.loads(row[0]) if row else {})}
@@ -63,6 +65,16 @@ class Recorder:
             if key is not None:
                 self.db.execute('INSERT INTO idempotency VALUES(?,?,?,?)',
                                 (caller, key, fingerprint, r['id']))
+
+    def log_event(self, event):
+        with self.db:
+            self.db.execute('INSERT INTO operational_events(payload) VALUES(?)', (json.dumps(event),))
+            self.db.execute('DELETE FROM operational_events WHERE id NOT IN (SELECT id FROM operational_events ORDER BY id DESC LIMIT 5000)')
+        return self.db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    def recent_events(self, limit=100):
+        return [json.loads(row[0]) | {'id': row[1]} for row in self.db.execute(
+            'SELECT payload,id FROM operational_events ORDER BY id DESC LIMIT ?', (limit,))]
 
     def active(self):
         return next((r for r in self.records.values() if r['state'] in ACTIVE), None)
@@ -354,7 +366,7 @@ def create_app(path=None):
                 if versioned:
                     route = route[3:] if route.startswith('v1/') else ''
                 method = request.method
-                allowed = {'settings': {'GET', 'PUT'}, 'status': {'GET'}, 'recordings': {'GET', 'POST'}, 'stop': {'POST'}}
+                allowed = {'settings': {'GET', 'PUT'}, 'status': {'GET'}, 'recordings': {'GET', 'POST'}, 'stop': {'POST'}, 'events': {'GET'}}
                 if versioned:
                     allowed.update({'health': {'GET'}, 'preview': {'GET'}, 'source': {'GET', 'PUT'}, 'storage': {'GET', 'PUT'}})
                 if route in allowed:
@@ -364,8 +376,8 @@ def create_app(path=None):
                     path_parts = route.split('/')
                     if len(path_parts) == 2:
                         methods = {'GET', 'PATCH', 'DELETE'}
-                    elif len(path_parts) == 3 and path_parts[2] in {'stop', 'download'}:
-                        methods = {'POST'} if path_parts[2] == 'stop' else {'GET'}
+                    elif len(path_parts) == 3 and path_parts[2] in {'stop', 'download', 'extend'}:
+                        methods = {'POST'} if path_parts[2] in {'stop', 'extend'} else {'GET'}
                     else:
                         raise web.HTTPNotFound()
                     if method not in methods:
@@ -377,6 +389,8 @@ def create_app(path=None):
                     raise web.HTTPBadRequest(text='JSON object required')
                 if route == 'health':
                     return web.json_response({'ok': True})
+                if route == 'events':
+                    return web.json_response({'items': service.recent_events()})
                 if route == 'preview':
                     configured = bool(service.settings['source_url'])
                     return web.json_response({'source_configured': configured,
@@ -453,8 +467,13 @@ def create_app(path=None):
                             if saved is None:
                                 raise web.HTTPConflict(text='Idempotent recording was deleted; use a new key')
                             return web.json_response(public_record(saved), status=201, headers={'Idempotency-Replayed':'true'})
-                    if service.active():
-                        raise web.HTTPConflict(text='Recorder busy capturing or processing')
+                    busy = service.active()
+                    if busy:
+                        event = {'type': 'recording.start_rejected', 'at': stamp(),
+                                 'recording_id': busy['id'], 'caller_id': caller,
+                                 'requested_title': title, 'reason': 'Recorder busy capturing or processing'}
+                        event['id'] = service.log_event(event)
+                        raise web.HTTPConflict(text='Recorder busy capturing or processing', headers={'X-Operational-Event-Id': str(event['id'])})
                     if not service.settings['source_url']:
                         raise web.HTTPBadRequest(text='Configure a stream in Settings before starting a recording')
                     if not service.space(16 * 1024 ** 2):
@@ -484,6 +503,36 @@ def create_app(path=None):
                 if r is None:
                     raise web.HTTPNotFound(text='Unknown recording')
                 action = parts[2] if len(parts) > 2 else ''
+                if action == 'extend':
+                    minutes = body.get('minutes')
+                    if set(body) - {'minutes'} or isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= 1440:
+                        raise web.HTTPBadRequest(text='minutes must be a whole number from 1 to 1440')
+                    key = request.headers.get('Idempotency-Key')
+                    if key is not None and (not 1 <= len(key) <= 200 or any(ord(c) < 33 or ord(c) > 126 for c in key)):
+                        raise web.HTTPBadRequest(text='Idempotency-Key must contain 1–200 visible ASCII characters')
+                    caller = request.get('caller_id', 'local')
+                    fingerprint = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                    if key is not None:
+                        prior = service.db.execute('SELECT fingerprint,response FROM extension_idempotency WHERE caller=? AND recording_id=? AND key=?', (caller, ident, key)).fetchone()
+                        if prior:
+                            if prior[0] != fingerprint:
+                                raise web.HTTPConflict(text='Idempotency key reused with changed request', headers={'X-Error-Code':'idempotency_conflict'})
+                            return web.json_response(json.loads(prior[1]), headers={'Idempotency-Replayed':'true'})
+                    if r['state'] not in {'recording', 'reconnecting', 'recovering'} or not r.get('deadline') or r.get('stop_requested') or epoch(r['deadline']) <= time.time():
+                        raise web.HTTPConflict(text='Recording is no longer eligible for extension')
+                    previous_deadline = r['deadline']
+                    updated = (dt.datetime.fromisoformat(previous_deadline) + dt.timedelta(minutes=minutes)).isoformat()
+                    now = stamp()
+                    extension = {'at': now, 'minutes': minutes, 'previous_deadline': previous_deadline,
+                                 'deadline': updated, 'actor': caller}
+                    r['deadline'] = updated
+                    r.setdefault('extensions', []).append(extension)
+                    result = public_record(r)
+                    with service.db:
+                        service.db.execute('INSERT OR REPLACE INTO records VALUES(?,?)', (r['id'], json.dumps(r)))
+                        if key is not None:
+                            service.db.execute('INSERT INTO extension_idempotency VALUES(?,?,?,?,?)', (caller, ident, key, fingerprint, json.dumps(result)))
+                    return web.json_response(result)
                 if route == 'stop' or action == 'stop':
                     r['stop_requested'] = True
                     service.save(r)

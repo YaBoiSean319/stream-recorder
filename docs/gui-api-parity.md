@@ -13,6 +13,8 @@ The API is the supported automation surface for server state. Paths in the matri
 | Start recording or opt out of auto-upload | `POST /api/v1/recordings` | `recordings:start` | Starts one capture; supports `Idempotency-Key` and optional upload metadata snapshot. |
 | Change automatic-upload overrides during capture | `PATCH /api/v1/recordings/{id}` | `recordings:start` for `auto_upload`/`upload_metadata` | Active capture only; values are validated and snapshotted before completion. |
 | Stop active or selected recording | `POST /api/v1/stop`; `POST /api/v1/recordings/{id}/stop` | `recordings:stop` | Selected ID is retry-safe; legacy active-stop stays available. |
+| Extend an active timed recording | `POST /api/v1/recordings/{id}/extend` | `recordings:extend` | Operators and Administrators; positive whole minutes from 1–1,440; deadline additions are durable and caller-scoped idempotent. |
+| Review missed start attempts | `GET /api/v1/events` | `recordings:events` | Operators and Administrators; lists external start requests rejected while capture/finalization was busy. |
 | List, inspect, download recordings | `GET /api/v1/recordings`; `GET /api/v1/recordings/{id}`; `GET /api/v1/recordings/{id}/download` | `recordings:read`, `recordings:download` | List uses `limit` and `offset`; ready output is MP4. |
 | Rename and pin/unpin | `PATCH /api/v1/recordings/{id}` | `recordings:title`, `recordings:pin` | Each field is authorized independently for scoped keys. |
 | Delete recording | `DELETE /api/v1/recordings/{id}` | `recordings:delete` | Destructive. Upload protection and active use return conflict; pins do not prevent deliberate deletion. |

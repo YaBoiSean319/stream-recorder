@@ -14,7 +14,8 @@ COOKIE = 'recorder_session'
 SAFE = {'GET', 'HEAD', 'OPTIONS'}
 OPERATOR_PERMISSIONS = frozenset({
     'status:read', 'preview:read', 'branding:read', 'recordings:read', 'recordings:start',
-    'recordings:stop', 'recordings:download', 'recordings:pin', 'recordings:title',
+    'recordings:stop', 'recordings:extend', 'recordings:download', 'recordings:pin', 'recordings:title',
+    'recordings:events',
     'uploads:read', 'uploads:create', 'uploads:retry', 'uploads:cancel',
     'viewers:read',
     'viewers:export',
@@ -54,6 +55,10 @@ def operation(request):
         return 'recordings:read' if method == 'GET' else 'recordings:start'
     if path == '/stop' or path.endswith('/stop') and path.startswith('/recordings/'):
         return 'recordings:stop'
+    if path.startswith('/recordings/') and path.endswith('/extend'):
+        return 'recordings:extend'
+    if path == '/events':
+        return 'recordings:events'
     if path.startswith('/recordings/') and path.endswith('/uploads'):
         return 'uploads:read' if method == 'GET' else 'uploads:create'
     if path.startswith('/recordings/'):
@@ -187,7 +192,7 @@ class Access:
                 raise web.HTTPForbidden(text='Administrator permission required')
         try:
             response = await handler(request)
-            if '/auth/' in request.path or '/youtube/' in request.path or '/viewers/' in request.path:
+            if '/auth/' in request.path or '/youtube/' in request.path or '/viewers/' in request.path or request.path.endswith('/events'):
                 response.headers['Cache-Control'] = 'no-store'
             return response
         except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
