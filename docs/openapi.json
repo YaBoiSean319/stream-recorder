@@ -1572,7 +1572,7 @@
         "operationId": "putBrandingAsset",
         "summary": "Upload or replace one shared image",
         "x-permission": "branding:write",
-        "description": "Raw PNG, JPEG, or WebP. Logos ≤2 MiB, ≤2048 px and ≤4 million pixels. Favicon ≤512 KiB and ≤512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
+        "description": "Raw PNG, JPEG, or WebP. Logos \u22642 MiB, \u22642048 px and \u22644 million pixels. Favicon \u2264512 KiB and \u2264512 px. Decoded and stored as PNG. SVG, animation and trailing active content are rejected without replacing the saved image. The SSO icon uses the logo limits.",
         "requestBody": {
           "required": true,
           "description": "Raw decoded image input; file picker in the interactive docs sends the selected PNG, JPEG, or WebP bytes.",
@@ -3022,7 +3022,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Includes ordered timeline buckets; range statistics and coverage; daily_peaks with browsers, local date, peak time, and coverage; heatmap cells keyed by Sunday=0 through Saturday=6 and hour=0–23 with individually selectable periods (including separate DST folds); and overlapping recordings with actual capture start/end. Active recording end is bounded by the current time. Periods without known samples are not invented.",
+            "description": "Includes ordered timeline buckets; range statistics and coverage; daily_peaks with browsers, local date, peak time, and coverage; heatmap cells keyed by Sunday=0 through Saturday=6 and hour=0\u201323 with individually selectable periods (including separate DST folds); and overlapping recordings with actual capture start/end. Active recording end is bounded by the current time. Periods without known samples are not invented.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3219,6 +3219,108 @@
           }
         }
       }
+    },
+    "/api/v1/recordings/{id}/extend": {
+      "post": {
+        "operationId": "extend_recording_deadline",
+        "summary": "Extend an active timed recording",
+        "x-permission": "recordings:extend",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Caller and recording scoped; replaying the same payload does not add time again."
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendRecording"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated recording and authoritative deadline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recording"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Unknown recording"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "description": "Adds 1\u20131,440 whole minutes to the current deadline of an active timed recording. A stopped, untimed, expired, or processing recording cannot be extended."
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "list_operational_events",
+        "summary": "List recent operational events",
+        "x-permission": "recordings:events",
+        "responses": {
+          "200": {
+            "description": "Recent rejected recording starts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OperationalEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3346,6 +3448,32 @@
             "type": "array",
             "items": {
               "type": "object"
+            }
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "minutes": {
+                  "type": "integer"
+                },
+                "previous_deadline": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "actor": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
@@ -4538,6 +4666,61 @@
             "items": {
               "type": "object"
             }
+          }
+        }
+      },
+      "ExtendRecording": {
+        "type": "object",
+        "required": [
+          "minutes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          }
+        }
+      },
+      "OperationalEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "at",
+          "recording_id",
+          "caller_id",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "recording.start_rejected"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recording_id": {
+            "type": "string"
+          },
+          "caller_id": {
+            "type": "string"
+          },
+          "requested_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
           }
         }
       }

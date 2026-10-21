@@ -56,6 +56,67 @@ class VersionedApiTests(unittest.IsolatedAsyncioTestCase):
         repeated = await self.client.post('/api/v1/recordings', json={'duration_seconds': 30}, headers=headers)
         self.assertEqual((await repeated.json())['id'], first[1]['id'])
 
+    async def test_extend_recording_validation_retry_and_operator_scope(self):
+        await self.client.put('/api/v1/settings', json={'source_url': 'http://127.0.0.1:9/live.m3u8'})
+        recording = await (await self.client.post('/api/v1/recordings', json={'duration_seconds': 120})).json()
+        key = await (await self.client.post('/api/v1/auth/keys', json={
+            'label': 'extension-only', 'permissions': ['recordings:extend'],
+        })).json()
+        headers = {'Authorization': 'Bearer ' + key['key'], 'Idempotency-Key': 'extend-once'}
+        path = f"/api/v1/recordings/{recording['id']}/extend"
+        for value in (0, -1, 1441, 1.5, True, '10'):
+            invalid = await self.client.post(path, json={'minutes': value}, headers=headers)
+            self.assertEqual(invalid.status, 400, value)
+        first = await self.client.post(path, json={'minutes': 10}, headers=headers)
+        self.assertEqual(first.status, 200)
+        body = await first.json()
+        self.assertEqual(len(body['extensions']), 1)
+        self.assertEqual(body['extensions'][0]['minutes'], 10)
+        replay = await self.client.post(path, json={'minutes': 10}, headers=headers)
+        self.assertEqual(replay.headers.get('Idempotency-Replayed'), 'true')
+        self.assertEqual((await replay.json())['deadline'], body['deadline'])
+        await self.client.close()
+        await self.open_client()
+        recovered = await (await self.client.get(f"/api/v1/recordings/{recording['id']}")).json()
+        self.assertEqual(recovered['deadline'], body['deadline'])
+        self.assertEqual(len(recovered['extensions']), 1)
+        replay_after_restart = await self.client.post(path, json={'minutes': 10}, headers=headers)
+        self.assertEqual(replay_after_restart.headers.get('Idempotency-Replayed'), 'true')
+        self.assertEqual((await replay_after_restart.json())['deadline'], body['deadline'])
+        conflict = await self.client.post(path, json={'minutes': 11}, headers=headers)
+        self.assertEqual(conflict.status, 409)
+        self.assertEqual((await conflict.json())['error']['code'], 'idempotency_conflict')
+        await self.client.post(f"/api/v1/recordings/{recording['id']}/stop", json={})
+        denied = await self.client.post(path, json={'minutes': 10}, headers={'Authorization': 'Bearer ' + key['key'], 'Idempotency-Key': 'after-stop'})
+        self.assertEqual(denied.status, 409)
+
+    async def test_rejected_start_is_logged_for_operators(self):
+        await self.client.put('/api/v1/settings', json={'source_url': 'http://127.0.0.1:9/live.m3u8'})
+        reader = await (await self.client.post('/api/v1/auth/keys', json={
+            'label': 'missed-start-reader', 'permissions': ['recordings:events'],
+        })).json()
+        denied_reader = await (await self.client.post('/api/v1/auth/keys', json={
+            'label': 'extension-only', 'permissions': ['recordings:extend'],
+        })).json()
+        first = await self.client.post('/api/v1/recordings', json={'duration_seconds': 120})
+        self.assertEqual(first.status, 201)
+        started = await first.json()
+        busy = await self.client.post('/api/v1/recordings', json={'title': 'Calendar event'})
+        self.assertEqual(busy.status, 409)
+        operator_headers = {'Authorization': 'Bearer ' + reader['key']}
+        events_response = await self.client.get('/api/v1/events', headers=operator_headers)
+        self.assertEqual(events_response.status, 200)
+        events = await events_response.json()
+        self.assertEqual(events['items'][0]['type'], 'recording.start_rejected')
+        self.assertEqual(events['items'][0]['requested_title'], 'Calendar event')
+        denied = await self.client.get('/api/v1/events', headers={'Authorization': 'Bearer ' + denied_reader['key']})
+        self.assertEqual(denied.status, 403)
+        await self.client.close()
+        await self.open_client()
+        events = await (await self.client.get('/api/v1/events', headers=operator_headers)).json()
+        self.assertEqual(events['items'][0]['requested_title'], 'Calendar event')
+        await self.client.post(f"/api/v1/recordings/{started['id']}/stop", json={})
+
     async def test_scoped_key_expiry_and_versioned_auth(self):
         response = await self.client.post('/api/v1/auth/keys', json={'label': 'status', 'permissions': ['status:read']})
         self.assertEqual(response.status, 201)
@@ -170,7 +231,8 @@ class VersionedApiTests(unittest.IsolatedAsyncioTestCase):
             '/api/v1/settings': {'get', 'put'}, '/api/v1/source': {'get', 'put'},
             '/api/v1/storage': {'get', 'put'}, '/api/v1/recordings': {'get', 'post'},
             '/api/v1/recordings/{id}': {'get', 'patch', 'delete'},
-            '/api/v1/recordings/{id}/stop': {'post'}, '/api/v1/recordings/{id}/download': {'get'},
+            '/api/v1/recordings/{id}/stop': {'post'}, '/api/v1/recordings/{id}/extend': {'post'}, '/api/v1/recordings/{id}/download': {'get'},
+            '/api/v1/events': {'get'},
             '/api/v1/branding': {'get', 'put'}, '/api/v1/branding/reset': {'post'},
             '/api/v1/branding/assets/{slot}': {'get', 'put', 'delete'},
             '/api/v1/auth/status': {'get'}, '/api/v1/auth/config': {'get', 'post'},

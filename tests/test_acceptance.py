@@ -1,5 +1,6 @@
 """Acceptance tests against public HTTP and media-download seams."""
 import asyncio
+import datetime as dt
 import json
 import os
 import re
@@ -387,6 +388,30 @@ class RecorderAcceptance(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(status['active']['stop_requested'])
         await self.request('POST', '/api/stop', {'recording_id': second['id']})
         await self.wait_terminal(second['id'])
+
+    async def test_timed_recording_can_be_extended_and_overlap_is_visible(self):
+        _, recording = await self.request('POST', '/api/v1/recordings', {'duration_seconds': 4, 'title': 'Town Hall'})
+        headers = {'Idempotency-Key': 'town-hall-extension-1'}
+        _, extended = await self.request('POST', f"/api/v1/recordings/{recording['id']}/extend", {'minutes': 1}, headers=headers)
+        self.assertEqual(extended['deadline'], (dt.datetime.fromisoformat(recording['deadline']) + dt.timedelta(minutes=1)).isoformat())
+        _, replay = await self.request('POST', f"/api/v1/recordings/{recording['id']}/extend", {'minutes': 1}, headers=headers)
+        self.assertEqual(replay['deadline'], extended['deadline'])
+        self.assertEqual(len(replay['extensions']), 1)
+        await asyncio.sleep(5)
+        _, still_active = await self.request('GET', f"/api/v1/recordings/{recording['id']}")
+        self.assertIn(still_active['state'], {'recording', 'reconnecting'})
+        status, rejection = await self.request('POST', '/api/v1/recordings', {'title': 'Second meeting'}, check=False)
+        self.assertEqual(status, 409)
+        _, events = await self.request('GET', '/api/v1/events')
+        self.assertEqual(events['items'][0]['type'], 'recording.start_rejected')
+        self.assertEqual(events['items'][0]['recording_id'], recording['id'])
+        self.assertEqual(events['items'][0]['requested_title'], 'Second meeting')
+        self.assertIn('busy', str(rejection).lower())
+        await self.request('POST', f"/api/v1/recordings/{recording['id']}/stop", {})
+        completed = await self.wait_terminal(recording['id'])
+        self.assertEqual(completed['state'], 'ready', completed)
+        self.assertEqual(len(completed['extensions']), 1)
+        await self.playable(completed)
 
     async def test_source_changes_apply_only_to_future_sessions(self):
         _, first = await self.request('POST', '/api/recordings', {'duration_seconds': 4})

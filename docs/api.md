@@ -21,6 +21,14 @@ An omitted permission list gives a key all operations allowed by its role, prese
 
 The caller-scoped `Idempotency-Key` header accepts 1–200 visible ASCII characters. For a given key identity (or local anonymous client identity when authentication is disabled), an identical request body returns the same recording and 201 with `Idempotency-Replayed: true`, even after restart. A different body returns 409 `idempotency_conflict`; a deleted recording returns 409 and needs a new key. Mappings currently have no automatic expiration. A concurrent start with another key gets 409 `conflict` while a session is active.
 
+## Extend a timed recording
+
+Operators and Administrators can add time to a live timed recording with `POST /api/v1/recordings/{recording_id}/extend` and `{"minutes":10}`. The value must be a whole number from 1 through 1,440. Each accepted request adds to the current deadline and returns the updated recording. The browser displays the resulting stop time in local time. Use the `recordings:extend` API-key permission.
+
+Supply an `Idempotency-Key` for reliable automation retries. The key is scoped to the caller and recording; repeating it with the same payload returns the original result without extending twice, while a changed payload conflicts. A manual recording, stopped or expired recording, or recording already in processing cannot be extended. Successful extensions are listed in the recording's `extensions` history with time, minutes, prior/new deadlines, and caller identity.
+
+When a start request reaches the recorder while another recording is capturing or finalizing, the normal 409 busy response remains. The rejected attempt is retained in `GET /api/v1/events` for Operators (`recordings:events` permission) and shown on the Recorder screen. Events can identify the caller and optional recording title supplied with the rejected request; the recorder cannot report calendar entries that external automation never submitted.
+
 Collection pages use `limit` (1–200, default 50) and `offset` (nonnegative, default 0) and return `items`, `total`, `limit`, `offset`, and `next_offset` (null at the end). Changes while paging can shift offsets, so a client should deduplicate by stable recording ID.
 
 ## Examples
